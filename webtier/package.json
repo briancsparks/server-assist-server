@@ -1,0 +1,13 @@
+{
+  "name": "sa-webtier",
+  "version": "0.0.1",
+  "description": "",
+  "main": "webtier.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "js2a": "^0.1.1",
+    "sgsg": "^0.9.3"
+  }
+}
