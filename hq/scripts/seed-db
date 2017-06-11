@@ -1,0 +1,23 @@
+#!/bin/bash -e
+
+# Each of the commands produces a JSON object, so turn this script's output into an array
+
+echo '['
+ra invoke ../ra-scripts/project.js upsertProject --project-id=mwp --uri-base=mobilewebprint.net/mwp/  --uri-test-base=mobiledevprint.net/mwp/
+echo -n ', '
+
+ra invoke ../ra-scripts/project.js upsertProject --project-id=sap --uri-base=mobilewebprint.net/sap/  --uri-test-base=mobiledevprint.net/sap/
+echo -n ', '
+
+ra invoke ../ra-scripts/partner.js upsertPartner --project-id=sap --partner-id=VALASSIS
+echo -n ', '
+
+# ---------- xcc
+#ra invoke ../ra-scripts/project.js upsertProject --project-id=xcc --uri-base=mobilewebassist.net/xcc/ --uri-test-base=mobiledevassist.net/xcc/
+ra invoke ../ra-scripts/project.js upsertProject --project-id=xcc --uri-base=salocal.net/xcc/ --uri-test-base=salocal.net/xcc/
+echo -n ', '
+
+ra invoke ../ra-scripts/app.js upsertApp --app-id=xcc_inspect --type=www --name=inspect --mount=xcc/www/inspect/
+
+echo ']'
+
