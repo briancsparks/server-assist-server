@@ -1,5 +1,10 @@
 #!/bin/bash -e
 
+eval "$(cli-shezargs $@)"
+
+echo $script_dir
+cd $script_dir
+
 # Each of the commands produces a JSON object, so turn this script's output into an array
 
 echo '['
@@ -20,4 +25,6 @@ echo -n ', '
 ra invoke ../ra-scripts/app.js upsertApp --app-id=xcc_inspect --type=www --name=inspect --mount=xcc/www/inspect/
 
 echo ']'
+
+cd $start_dir
 
