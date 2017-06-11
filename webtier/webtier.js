@@ -1,13 +1,24 @@
 
-const sg           = require('sgsg');
-const _            = sg._;
-const http         = require('http');
+const sg                  = require('sgsg');
+const _                   = sg._;
+const Router              = require('routes');
+const clusterLib          = require('js-cluster');
+const http                = require('http');
 
-var   ARGV         = sg.ARGV();
+var   router              = Router();
+var   ARGV                = sg.ARGV();
+var   ServiceList         = clusterLib.ServiceList;
 
-const hostname     = '127.0.0.1';
-const port         = 8210;
-const port2        = 8212;
+const hostname            = '127.0.0.1';
+const port2               = 8212;
+
+const myPort              = 8401;
+const myIp                = process.env.SERVERASSIST_MY_IP          || '127.0.0.1';
+const utilIp              = process.env.SERVERASSIST_UTIL_HOSTNAME  || 'localhost';
+const myColor             = process.env.SERVERASSIST_COLOR          || 'green';
+const myStack             = process.env.SERVERASSIST_STACK          || 'test';
+
+var   myServices          = new ServiceList(['serverassist', myColor, myStack].join('-'), utilIp);
 
 var dumpReq;
 
@@ -27,8 +38,14 @@ const server = http.createServer((req, res) => {
   });
 });
 
-server.listen(port, hostname, () => {
-  console.log(`Server running at http://${hostname}:${port}/`);
+server.listen(myPort, hostname, () => {
+  console.log(`Server running at http://${hostname}:${myPort}/`);
+
+  registerAsService();
+  function registerAsService() {
+    myServices.registerService('webtier_router', 'http://'+myIp+':'+myPort, myIp, 4000, function(){});
+    setTimeout(registerAsService, 750);
+  }
 });
 
 dumpReq = function(req, res) {
