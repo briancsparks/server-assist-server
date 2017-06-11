@@ -2,7 +2,6 @@
 
 eval "$(cli-shezargs $@)"
 
-echo $script_dir
 cd $script_dir
 
 # Each of the commands produces a JSON object, so turn this script's output into an array
