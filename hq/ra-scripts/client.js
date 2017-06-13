@@ -28,7 +28,7 @@ lib.upsertClient = function(argv_, context, callback) {
     var item = {};
 
     _.each(argv, (value, key) => {
-      sg.setOnn(item, ['$set', key], value);
+      sg.setOnn(item, ['$set', sg.toCamelCase(key)], sg.smartValue(value));
     });
 
     everbose(2, `Upserting client ${clientId}`);

@@ -21,7 +21,10 @@ echo -n ', '
 ra invoke ../ra-scripts/project.js upsertProject --project-id=xcc --uri-base=salocal.net/xcc/ --uri-test-base=salocal.net/xcc/
 echo -n ', '
 
-ra invoke ../ra-scripts/app.js upsertApp --app-id=xcc_inspect --type=www --name=inspect --mount=xcc/www/inspect/
+ra invoke ../ra-scripts/app.js upsertApp --project-id=xcc --vetted=true --type=www --name=inspect --app-id=xcc_inspect --mount=xcc/www/inspect/ --rewrite=false
+
+# API for handling run-time debug info (telemetry) for xcc
+#ra invoke ../ra-scripts/app.js upsertApp --project-id=xcc --vetted=true --type=api --name=dbg-telemetry --app-id=api_dbgtelemetry --mount=xcc/api/v1/dbg-telemetry/ --rewrite=api/v1/dbg-telemetry/
 
 echo ']'
 

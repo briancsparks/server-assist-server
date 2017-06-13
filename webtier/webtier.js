@@ -4,6 +4,8 @@ const _                   = sg._;
 const Router              = require('routes');
 const clusterLib          = require('js-cluster');
 const http                = require('http');
+const urlLib              = require('url');
+var   routes              = require('./routes/routes');
 
 var   router              = Router();
 var   ARGV                = sg.ARGV();
@@ -20,32 +22,59 @@ const myStack             = process.env.SERVERASSIST_STACK          || 'test';
 
 var   myServices          = new ServiceList(['serverassist', myColor, myStack].join('-'), utilIp);
 
-var dumpReq;
+var   dumpReq;
 
-const server = http.createServer((req, res) => {
-  return sg.getBody(req, function() {
-    dumpReq(req, res);
+var servers = {};
+sg.__run([function(next) {
+  return routes.addRoutesToServers(servers, (err) => {
+    if (err) { console.error(`Failed to add servers`); }
 
-    var fwd   = _.rest(req.url.split('/')).join('/');
-    var host  = '127.0.0.1';
-    var redir = `/rpxi/${req.method}/${host}:${port2}/${fwd}`;
-
-    console.error(`${req.method}: ${fwd} ->> ${host}:${port2}`);
-
-    res.statusCode = 200;
-    res.setHeader('X-Accel-Redirect', redir);
-    res.end('');
+    return next();
   });
-});
+}], function() {
+  const server = http.createServer((req, res) => {
+    return sg.getBody(req, function() {
+      dumpReq(req, res);
 
-server.listen(myPort, hostname, () => {
-  console.log(`Server running at http://${hostname}:${myPort}/`);
+      const pathname      = urlLib.parse(req.url).pathname;
+      var   resPayload    = `Result for ${pathname}`;
 
-  registerAsService();
-  function registerAsService() {
-    myServices.registerService('webtier_router', 'http://'+myIp+':'+myPort, myIp, 4000, function(){});
-    setTimeout(registerAsService, 750);
-  }
+      const host          = req.headers.host;
+      const serverRoutes  = servers[host] && servers[host].router;
+
+      if (serverRoutes) {
+        const route       = serverRoutes.match(pathname);
+
+        if (route && _.isFunction(route.fn)) {
+          return route.fn(req, res, route.params, route.splats, route);
+        } else {
+
+          // Did not match the route to any handler
+          res.statusCode  = 404;
+          resPayload      = `404 - Not Found: ${host} / ${pathname}`;
+        }
+
+      } else {
+
+        // We do not know that server
+        res.statusCode  = 400;
+        resPayload      = "400 - Bad Request";
+      }
+
+      res.end(resPayload+'\n');
+    });
+  });
+
+  server.listen(myPort, hostname, () => {
+    console.log(`Server running at http://${hostname}:${myPort}/`);
+    console.log('');
+
+    registerAsService();
+    function registerAsService() {
+      setTimeout(registerAsService, 750);
+      myServices.registerService('webtier_router', 'http://'+myIp+':'+myPort, myIp, 4000, function(){});
+    }
+  });
 });
 
 dumpReq = function(req, res) {

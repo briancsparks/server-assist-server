@@ -29,7 +29,7 @@ lib.upsertApp = function(argv_, context, callback) {
     var item   = { $set: {appId} };
 
     _.each(argv, (value, key) => {
-      sg.setOnn(item, ['$set', sg.toCamelCase(key)], value);
+      sg.setOnn(item, ['$set', sg.toCamelCase(key)], sg.smartValue(value));
     });
 
     everbose(2, `Upserting app: ${appId}`);
