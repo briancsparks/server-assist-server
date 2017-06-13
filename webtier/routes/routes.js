@@ -125,7 +125,9 @@ lib.addRoutesToServers = function(servers, callback) {
           servers[fqdn]         = servers[fqdn]         || {};
           servers[fqdn].router  = servers[fqdn].router  || Router();
 
-          servers[fqdn].router.addRoute(`/${mount}*`, function(req, res, params, splats) {
+          var route = `/${mount}*`;
+          console.log(`Adding route: ${route}`);
+          servers[fqdn].router.addRoute(route, function(req, res, params, splats) {
 
             // This is the function that handles the route: project.uriBase/app.mount/*
             // Use X-Accel-Redirect to tell nginx to send the request to the service.
@@ -140,7 +142,7 @@ lib.addRoutesToServers = function(servers, callback) {
 
             // rewrite was set to app.rewrite above
             if (rewrite === false)                { rewritten = req.url; }        // Nothing
-            else if (_.isString(rewrite))         { rewritten = rewrite; }        // TODO Add search
+            else if (_.isString(rewrite))         { rewritten = `${rewrite}${splats}`; }        // TODO Add search
 
             // Get the location of the service
             return serviceList.getOneService(app.appId, (err, location) => {
