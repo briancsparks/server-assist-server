@@ -18,7 +18,7 @@ echo -n ', '
 
 # ---------- xcc
 #ra invoke ../ra-scripts/project.js upsertProject --project-id=xcc --uri-base=mobilewebassist.net/xcc/ --uri-test-base=mobiledevassist.net/xcc/
-ra invoke ../ra-scripts/project.js upsertProject --project-id=xcc --uri-base=salocal.net/xcc/ --uri-test-base=salocal.net/xcc/
+ra invoke ../ra-scripts/project.js upsertProject --project-id=xcc --uri-base=local.mobilewebassist.net/xcc/ --uri-test-base=local.mobilewebassist.net/xcc/
 echo -n ', '
 
 ra invoke ../ra-scripts/app.js upsertApp --project-id=xcc --vetted=true --type=www --name=inspect --app-id=xcc_inspect --mount=xcc/www/inspect/ --rewrite=false

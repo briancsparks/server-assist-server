@@ -1,21 +1,22 @@
 
 /**
- *  Finds apps and apis and such that are registered in the DB, and routes to
+ *  Finds apps and apis that are registered in the DB, and routes them to
  *  any service that is active.
  *
  *  The apps collection is a mapping between fqdn+pathroot ->> service_name. So,
- *  when a request comes in for fqdn/pathroot/..., it gets sent to the service
+ *  when a request comes in for fqdn.net/pathroot/..., it gets sent to the running service
  *  (via X-Accel-Redirect.)
  */
-var sg                    = require('sgsg');
-var _                     = sg._;
-var MongoClient           = require('mongodb').MongoClient;
+const sg                  = require('sgsg');
+const _                   = sg._;
+const MongoClient         = require('mongodb').MongoClient;
 const Router              = require('routes');
 const clusterLib          = require('js-cluster');
 
 const ARGV                = sg.ARGV();
 const verbose             = sg.verbose;
 const lpad                = sg.lpad;
+const normlz              = sg.normlz;
 var   router              = Router();
 const ServiceList         = clusterLib.ServiceList;
 
@@ -31,6 +32,9 @@ var   mongoUrl            = `mongodb://${dbHost}:27017/serverassist`;
 var shiftBy;
 var lib = {};
 
+/**
+ *  Add FQDN and paths to the `servers` object.
+ */
 lib.addRoutesToServers = function(servers, callback) {
   return MongoClient.connect(mongoUrl, function(err, db) {
     if (err) { return sg.die(err, callback, 'upsertApp.MongoClient.connect'); }
@@ -53,23 +57,22 @@ lib.addRoutesToServers = function(servers, callback) {
       }
 
       appsDb.find(appQuery).each((err, app) => {
-        if (err)    { error = err; return false; }              // return false stops the enumeration
+        if (err)    { error = err; next(); return false; }      // return false stops the enumeration
         if (!app)   { return next(); }                          // Done
 
         apps.push(app);
       });
 
+    // ---------- Exit if there was an error ----------
     }, function(next) {
-
-      if (error) {
-        return sg.die(error, callback, 'addRoutes.each-app');
-      }
-
+      if (error) { return sg.die(error, callback, 'addRoutes.each-app'); }
       return next();
 
+    // ---------- For each app, setup route ----------
     }], function() {
 
-      _.each(apps, function(app) {
+      console.log('----------------------------------------------------------------------------------------------------------------------------------------------');
+      sg.__each(apps, function(app, nextApp) {
 
         var uriBase;
 
@@ -82,13 +85,15 @@ lib.addRoutesToServers = function(servers, callback) {
         if (!appId)               { console.error(`No appId`); return; }
         if (!mount)               { console.error(`No mount for app: ${appId}`); return; }
 
-        if ('rewrite' in app)     { rewrite = app.rewrite; }
-        return sg.__run([function(next) {
+        // app.projectId (and a project object from the DB) are optional in non-prod
+        if (sg.isProduction()) {
+          if (!projectId)           { console.error(`No projectId for app: ${appId}`); return; }
+        }
 
-          // app.projectId (and a project object from the DB) are optional in non-prod
-          if (sg.isProduction()) {
-            if (!projectId)           { console.error(`No projectId for app: ${appId}`); return; }
-          }
+        if ('rewrite' in app)     { rewrite = app.rewrite; }
+
+        // ---------- Find uriBase from the DB (projects) ----------
+        return sg.__run([function(next) {
 
           if (projectId) {
             // Get the associated project
@@ -102,13 +107,14 @@ lib.addRoutesToServers = function(servers, callback) {
 
           return next();
 
+        // ---------- Find the uriBase from the app object -----------
         }, function(next) {
 
           if (uriBase)              { return next(); }
           if (sg.isProduction())    { return sg.die(err, callback, 'no uriBase'); }
 
           productId = _.first(app.mount.split('/'));
-          uriBase = `salocal.net/${productId}`;
+          uriBase = `local.mobilewebassist.net/${productId}`;
           return next();
 
         }], function() {
@@ -116,23 +122,29 @@ lib.addRoutesToServers = function(servers, callback) {
           //-------------------------------------------------------------------------------------------------------------------------
           // uriBase (and uriTestBase) are the url-root of the project -- like: mobilewebassist.net/prj -- for the `prj` project
 
-          // Split the fqdn and the pathroot
-          const [fqdn, root]    = shiftBy(uriBase, '/');      // or uriTestBase
+          // Fixup fqdn
+          uriBase = uriBase.replace(/^salocal[.]net/, 'local.mobilewebprint.net');
 
-          console.log(`Mounting ${lpad(appId, 20)} at ${lpad(fqdn, 20)} - /${mount}`);
+          // Split the fqdn and the pathroot
+          const [fqdn, root]    = shiftBy(uriBase, '/');      // or uriTestBase -- [ mobilewebassist.net, prj ]
 
           // Add the fqdn/route
           servers[fqdn]         = servers[fqdn]         || {};
           servers[fqdn].router  = servers[fqdn].router  || Router();
 
-          var route = `/${mount}*`;
-          console.log(`Adding route: ${route}`);
+          const route = normlz(`/${mount}/*`);
+          console.log(`Mounting ${lpad(appId, 20)} at ${lpad(fqdn, 20)}: ${route}`);
+
+          //=========================================================================================================================
+          // The run-time handler
+          //=========================================================================================================================
+
           servers[fqdn].router.addRoute(route, function(req, res, params, splats) {
 
             // This is the function that handles the route: project.uriBase/app.mount/*
             // Use X-Accel-Redirect to tell nginx to send the request to the service.
 
-            verbose(2, `Handling ${fqdn} /${mount}:`, {params}, {splats});
+            verbose(2, `Handling ${fqdn} ${route}:`, {params}, {splats});
 
             //-------------------------------------------------------------------------------------------------------------------------
             // Rewrite the url path -- so that a service can have some flexibility where it is mounted
@@ -142,9 +154,9 @@ lib.addRoutesToServers = function(servers, callback) {
 
             // rewrite was set to app.rewrite above
             if (rewrite === false)                { rewritten = req.url; }        // Nothing
-            else if (_.isString(rewrite))         { rewritten = `${rewrite}${splats}`; }        // TODO Add search
+            else if (_.isString(rewrite))         { rewritten = normlz(`/${rewrite}/${splats}`); }        // TODO Add search
 
-            // Get the location of the service
+            // ---------- Get the location of the service
             return serviceList.getOneService(app.appId, (err, location) => {
               if (err) {
                 res.statusCode = 404;
@@ -153,7 +165,7 @@ lib.addRoutesToServers = function(servers, callback) {
               }
 
               const internalEndpoint  = location.replace(/^(http|https):[/][/]/i, '');
-              const redir             = `/rpxi/${req.method}/${internalEndpoint}/${rewritten}`;
+              const redir             = normlz(`/rpxi/${req.method}/${internalEndpoint}/${rewritten}`);
 
               verbose(2, `${appId} ->> ${redir}`);
 
@@ -162,10 +174,14 @@ lib.addRoutesToServers = function(servers, callback) {
               res.end('');
             });
           });
-        });
-      });
 
-      return callback(null);
+          return nextApp();
+        });
+
+      }, function() {
+        console.log('----------------------------------------------------------------------------------------------------------------------------------------------\n');
+        return callback(null);
+      });
     });
   });
 };
