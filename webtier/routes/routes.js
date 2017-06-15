@@ -35,9 +35,9 @@ var lib = {};
 /**
  *  Add FQDN and paths to the `servers` object.
  */
-lib.addRoutesToServers = function(servers, callback) {
-  return MongoClient.connect(mongoUrl, function(err, db) {
-    if (err) { return sg.die(err, callback, 'upsertApp.MongoClient.connect'); }
+lib.addRoutesToServers = function(db, servers, callback) {
+//  return MongoClient.connect(mongoUrl, function(err, db) {
+//    if (err) { return sg.die(err, callback, 'upsertApp.MongoClient.connect'); }
 
     var projectsDb  = db.collection('projects');
     var appsDb      = db.collection('apps');
@@ -144,7 +144,7 @@ lib.addRoutesToServers = function(servers, callback) {
             // This is the function that handles the route: project.uriBase/app.mount/*
             // Use X-Accel-Redirect to tell nginx to send the request to the service.
 
-            verbose(2, `Handling ${fqdn} ${route}:`, {params}, {splats});
+            verbose(3, `Handling ${fqdn} ${route}:`, {params}, {splats});
 
             //-------------------------------------------------------------------------------------------------------------------------
             // Rewrite the url path -- so that a service can have some flexibility where it is mounted
@@ -183,7 +183,7 @@ lib.addRoutesToServers = function(servers, callback) {
         return callback(null);
       });
     });
-  });
+//  });
 };
 
 shiftBy = function(str, sep_) {
