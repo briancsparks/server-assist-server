@@ -35,155 +35,155 @@ var lib = {};
 /**
  *  Add FQDN and paths to the `servers` object.
  */
-lib.addRoutesToServers = function(db, servers, callback) {
-//  return MongoClient.connect(mongoUrl, function(err, db) {
-//    if (err) { return sg.die(err, callback, 'upsertApp.MongoClient.connect'); }
+lib.addRoutesToServers = function(db, servers, apps, callback) {
 
-    var projectsDb  = db.collection('projects');
-    var appsDb      = db.collection('apps');
-    var appQuery    = {};
+  var projectsDb  = db.collection('projects');
+  var appsDb      = db.collection('apps');
+  var appQuery    = {};
 
-    //-------------------------------------------------------------------------------------------------------------
-    // Loop over the apps and make a mapping from fqdn/pathroot to a service.
-    //   Use Routes for pathroot handling.
-    //   Use js-cluster for the service mechanism.
+  //-------------------------------------------------------------------------------------------------------------
+  // Loop over the apps and make a mapping from fqdn/pathroot to a service.
+  //   Use Routes for pathroot handling.
+  //   Use js-cluster for the service mechanism.
 
-    var error;
-    var apps = [];
-    sg.__run([function(next) {
-      // In production, we only mount apps that have been vetted
+  var error;
+  sg.__run([function(next) {
+
+    // In production, we only mount apps that have been vetted
+    if (sg.isProduction()) {
+      appQuery.vetted = true;
+    }
+
+    // Query the DB for apps
+    appsDb.find(appQuery).each((err, app) => {
+      if (err)    { error = err; next(); return false; }      // return false stops the enumeration
+      if (!app)   { return next(); }                          // Done
+
+      apps.unshift(app);
+    });
+
+  // ---------- Exit if there was an error ----------
+  }, function(next) {
+    if (error) { return sg.die(error, callback, 'addRoutes.each-app'); }
+    return next();
+
+  // ---------- For each app, setup route ----------
+  }], function() {
+
+    console.log('----------------------------------------------------------------------------------------------------------------------------------------------');
+    sg.__each(apps, function(app, nextApp) {
+
+      var uriBase;
+
+      var rewrite   = false;
+      var appId     = app.appId;
+      var projectId = app.projectId;
+      var mount     = app.mount;
+
+      // Make sure we have necessary components
+      if (!appId)               { console.error(`No appId`); return; }
+      if (!mount)               { console.error(`No mount for app: ${appId}`); return; }
+
+      // app.projectId (and a project object from the DB) are optional in non-prod
       if (sg.isProduction()) {
-        appQuery.vetted = true;
+        if (!projectId)         { console.error(`No projectId for app: ${appId}`); return; }
       }
 
-      appsDb.find(appQuery).each((err, app) => {
-        if (err)    { error = err; next(); return false; }      // return false stops the enumeration
-        if (!app)   { return next(); }                          // Done
+      if ('rewrite' in app)     { rewrite = app.rewrite; }
 
-        apps.push(app);
-      });
+      // ---------- Find uriBase from the DB (projects) ----------
+      return sg.__run([function(next) {
 
-    // ---------- Exit if there was an error ----------
-    }, function(next) {
-      if (error) { return sg.die(error, callback, 'addRoutes.each-app'); }
-      return next();
+        // Get the associated project
+        if (projectId) {
+          return projectsDb.find({projectId}).limit(1).each((err, project) => {
+            if (err)                { return sg.die(err, callback, '.find(projectId)'); }
+            if (!project)           { return next(); }
 
-    // ---------- For each app, setup route ----------
-    }], function() {
-
-      console.log('----------------------------------------------------------------------------------------------------------------------------------------------');
-      sg.__each(apps, function(app, nextApp) {
-
-        var uriBase;
-
-        var rewrite   = false;
-        var appId     = app.appId;
-        var projectId = app.projectId;
-        var mount     = app.mount;
-
-        // Make sure we have necessary components
-        if (!appId)               { console.error(`No appId`); return; }
-        if (!mount)               { console.error(`No mount for app: ${appId}`); return; }
-
-        // app.projectId (and a project object from the DB) are optional in non-prod
-        if (sg.isProduction()) {
-          if (!projectId)           { console.error(`No projectId for app: ${appId}`); return; }
+            uriBase = project.uriBase;
+          });
         }
 
-        if ('rewrite' in app)     { rewrite = app.rewrite; }
+        return next();
 
-        // ---------- Find uriBase from the DB (projects) ----------
-        return sg.__run([function(next) {
+      // ---------- Find the uriBase from the app object -----------
+      }, function(next) {
 
-          if (projectId) {
-            // Get the associated project
-            return projectsDb.find({projectId}).limit(1).each((err, project) => {
-              if (err)                { return sg.die(err, callback, '.find(projectId)'); }
-              if (!project)           { return next(); }
+        if (uriBase)              { return next(); }
+        if (sg.isProduction())    { return sg.die(err, callback, 'no uriBase'); }
 
-              uriBase = project.uriBase;
-            });
-          }
+        productId = _.first(app.mount.split('/'));
+        uriBase   = normlz(`local.mobilewebassist.net/${productId}`);
 
-          return next();
+        return next();
 
-        // ---------- Find the uriBase from the app object -----------
-        }, function(next) {
+      }], function() {
 
-          if (uriBase)              { return next(); }
-          if (sg.isProduction())    { return sg.die(err, callback, 'no uriBase'); }
+        //-------------------------------------------------------------------------------------------------------------------------
+        // uriBase (and uriTestBase) are the url-root of the project -- like: mobilewebassist.net/prj -- for the `prj` project
 
-          productId = _.first(app.mount.split('/'));
-          uriBase = `local.mobilewebassist.net/${productId}`;
-          return next();
+        // Fixup fqdn
+        uriBase = uriBase.replace(/^salocal[.]net/, 'local.mobilewebprint.net');
 
-        }], function() {
+        // Split the fqdn and the pathroot
+        const [fqdn, root]    = shiftBy(uriBase, '/');      // or uriTestBase -- [ mobilewebassist.net, prj ]
+
+        // Add the fqdn/route
+        servers[fqdn]         = servers[fqdn]         || {};
+        servers[fqdn].router  = servers[fqdn].router  || Router();
+
+        const route = normlz(`/${mount}/*`);
+        console.log(`Mounting ${lpad(appId, 20)} at ${lpad(fqdn, 20)}: ${route}`);
+
+        //=========================================================================================================================
+        // The run-time handler
+        //=========================================================================================================================
+
+        servers[fqdn].router.addRoute(route, function(req, res, params, splats) {
+
+          // This is the function that handles the route: project.uriBase/app.mount/*
+          // Use X-Accel-Redirect to tell nginx to send the request to the service.
+
+          verbose(3, `Handling ${fqdn} ${route}:`, {params}, {splats});
 
           //-------------------------------------------------------------------------------------------------------------------------
-          // uriBase (and uriTestBase) are the url-root of the project -- like: mobilewebassist.net/prj -- for the `prj` project
+          // Rewrite the url path -- so that a service can have some flexibility where it is mounted
 
-          // Fixup fqdn
-          uriBase = uriBase.replace(/^salocal[.]net/, 'local.mobilewebprint.net');
+          // Default to 'no change'
+          var rewritten = req.url;
 
-          // Split the fqdn and the pathroot
-          const [fqdn, root]    = shiftBy(uriBase, '/');      // or uriTestBase -- [ mobilewebassist.net, prj ]
+          // rewrite was set to app.rewrite above
+          if (rewrite === false)                { rewritten = req.url; }        // Nothing
+          else if (_.isString(rewrite))         { rewritten = normlz(`/${rewrite}/${splats}`); }        // TODO Add search
 
-          // Add the fqdn/route
-          servers[fqdn]         = servers[fqdn]         || {};
-          servers[fqdn].router  = servers[fqdn].router  || Router();
+          // ---------- Get the location of the service
+          return serviceList.getOneService(app.appId, (err, location) => {
+            if (err) {
+              res.statusCode = 404;
+              res.end('Not Found');
+              return;
+            }
 
-          const route = normlz(`/${mount}/*`);
-          console.log(`Mounting ${lpad(appId, 20)} at ${lpad(fqdn, 20)}: ${route}`);
+            const internalEndpoint  = location.replace(/^(http|https):[/][/]/i, '');
+            const redir             = normlz(`/rpxi/${req.method}/${internalEndpoint}/${rewritten}`);
 
-          //=========================================================================================================================
-          // The run-time handler
-          //=========================================================================================================================
+            verbose(2, `${appId} ->> ${redir}`);
 
-          servers[fqdn].router.addRoute(route, function(req, res, params, splats) {
-
-            // This is the function that handles the route: project.uriBase/app.mount/*
-            // Use X-Accel-Redirect to tell nginx to send the request to the service.
-
-            verbose(3, `Handling ${fqdn} ${route}:`, {params}, {splats});
-
-            //-------------------------------------------------------------------------------------------------------------------------
-            // Rewrite the url path -- so that a service can have some flexibility where it is mounted
-
-            // Default to 'no change'
-            var rewritten = req.url;
-
-            // rewrite was set to app.rewrite above
-            if (rewrite === false)                { rewritten = req.url; }        // Nothing
-            else if (_.isString(rewrite))         { rewritten = normlz(`/${rewrite}/${splats}`); }        // TODO Add search
-
-            // ---------- Get the location of the service
-            return serviceList.getOneService(app.appId, (err, location) => {
-              if (err) {
-                res.statusCode = 404;
-                res.end('Not Found');
-                return;
-              }
-
-              const internalEndpoint  = location.replace(/^(http|https):[/][/]/i, '');
-              const redir             = normlz(`/rpxi/${req.method}/${internalEndpoint}/${rewritten}`);
-
-              verbose(2, `${appId} ->> ${redir}`);
-
-              res.statusCode = 200;
-              res.setHeader('X-Accel-Redirect', redir);
-              res.end('');
-            });
+            res.statusCode = 200;
+            res.setHeader('X-Accel-Redirect', redir);
+            res.end('');
           });
-
-          return nextApp();
         });
+        // ---------- End: run-time handler ----------
 
-      }, function() {
-        console.log('----------------------------------------------------------------------------------------------------------------------------------------------\n');
-        return callback(null);
+        return nextApp();
       });
+
+    }, function() {
+      console.log('----------------------------------------------------------------------------------------------------------------------------------------------\n');
+      return callback(null);
     });
-//  });
+  });
 };
 
 shiftBy = function(str, sep_) {

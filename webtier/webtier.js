@@ -24,8 +24,6 @@ var   dumpReq;
 
 const appName                 = 'webtier_router';
 const port                    = 8401;
-//const mount                   = 'xcc/api/v1/dbg-telemetry/';
-//const rewrite                 = 'api/v1/dbg-telemetry/';
 
 var servers = {};
 
@@ -34,24 +32,48 @@ const main = function() {
   const fqdnStr = ARGV.fqdn || ARGV.fqdns || '';
   const fqdns   = fqdnStr.split(',');
 
-  if (isLocalWorkstation()) {
-    fqdns.unshift('local.mobilewebassist.net');
-  }
-
   return MongoClient.connect(mongoHost, (err, db) => {
     if (err)      { return sg.die(err, `Could not connect to DB ${mongoHost}`); }
 
+    var apps = [];
+
     sg.__run([function(next) {
-      return routes.addRoutesToServers(db, servers, (err) => {
+
+      // ---------- Listen at root for dev workstations ----------
+
+      // If we are on a local workstation, handle root as being sent to :3000, the typical
+      // Node.js port.  We add an app object (same format as whats in the apps collection
+      // in the DB.), and then inform that there is a webtier_router service.
+      if (isLocalWorkstation()) {
+        apps.push({appId:'web_root', mount:'/'});
+      }
+
+      // When on a workstation, do a favor and install a route to the root
+      if (isLocalWorkstation()) {
+        fqdns.unshift('local.mobilewebassist.net');
+        registerMyService();
+      }
+
+      return next();
+
+      function registerMyService() {
+        setTimeout(registerMyService, 750);
+        registerAsService('web_root', `http://${myIp}:3000`, myIp, 4000);
+      }
+
+    }, function(next) {
+      return routes.addRoutesToServers(db, servers, apps, (err) => {
         if (err) { console.error(`Failed to add servers`); }
 
         return next();
       });
+
     }, function(next) {
 
+      // ---------- Run the server ----------
       const server = http.createServer((req, res) => {
         return sg.getBody(req, function() {
-          dumpReq(req, res);
+          //dumpReq(req, res);
 
           const pathname      = urlLib.parse(req.url).pathname;
           var   resPayload    = `Result for ${pathname}`;
@@ -82,13 +104,14 @@ const main = function() {
         });
       });
 
+      // ---------- Listen on --port ----------
       server.listen(port, myIp, () => {
         console.log(`${appName} running at http://${myIp}:${port}/`);
         console.log('');
 
         next();
-//        registerAsServiceApp(appName, mount, {rewrite});
 
+        // Inform of my webtier_router service
         registerMyService();
         function registerMyService() {
           setTimeout(registerMyService, 750);
@@ -98,9 +121,13 @@ const main = function() {
 
     }], function() {
 
+      // ---------- Build the nginx.conf file ----------
+
+      // Generate the contents
       return buildNginxConf({fqdns}, function(err, conf) {
         if (err) { return sg.die(err, `Failed build nginx.conf file`); }
 
+        // Save the file to a tmp location
         var confFilename = '/tmp/server-assist-nginx.conf';
         return fs.writeFile(confFilename, conf, function(err) {
           if (err) { return sg.die(err, `Failed save nginx.conf /tmp/ file`); }
@@ -108,11 +135,13 @@ const main = function() {
           const cmd   = path.join(__dirname, 'scripts', 'reload-nginx');
           const args  = [confFilename];
 
+          // Run a shell script that copies it to the right place and restats nginx
           return sg.exec(cmd, args, (err, exitCode, stdoutChunks, stderrChunks, signal) => {
-            if (err)  { console.error(`Failed to (re)start nginx`); }
-            console.log(`${cmd}: exit: ${exitCode}, signal: ${signal}`);
-            console.log(stderrChunks.join('\n'));
-            console.log(stdoutChunks.join('\n'));
+            if (err)                        { console.error(`Failed to (re)start nginx`); }
+            if (exitCode !== 0 || signal)   { console.log(`${cmd}: exit: ${exitCode}, signal: ${signal}`); }
+
+            console.log(stderrChunks.join(''));
+            console.log(stdoutChunks.join(''));
 
           });
         });

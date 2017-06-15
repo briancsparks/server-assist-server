@@ -130,6 +130,27 @@ lib.build = function(argv, context, callback) {
                           ng.proxyHttpVersion('1.1'),
                           ng.proxyPass(webtierRouter)
                         ]
+                      }),
+
+                      ng.blankLine(),
+                      ngx.location('/', (ngx) => {
+                        return [
+                          ng.proxyConnectTimeout(5000),
+                          ng.proxySendTimeout(5000),
+                          ng.proxyReadTimeout(5000),
+                          ng.sendTimeout(5000),
+                          ng.proxyRedirect(false),
+
+                          ng.proxySetHeader('X-Real-IP', '$remote_addr'),
+                          ng.proxySetHeader('X-Forwarded-For', '$proxy_add_x_forwarded_for'),
+                          ng.proxySetHeader('X-Forwarded-Proto', '$scheme'),
+                          ng.proxySetHeader('Host', '$http_host'),
+                          ng.proxySetHeader('X-NginX-Proxy', true),
+                          ng.proxySetHeader('Connection', ''),
+
+                          ng.proxyHttpVersion('1.1'),
+                          ng.proxyPass(webtierRouter)
+                        ]
                       })
                     ];
                   })
