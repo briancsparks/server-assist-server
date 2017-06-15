@@ -1,0 +1,22 @@
+#!/bin/bash -e
+
+conf_file="$1"
+
+tmp_dir="/tmp/reload-nginx-work"
+mkdir -p $tmp_dir
+
+cp /etc/nginx/nginx.conf "$tmp_dir/"
+sudo cp $conf_file /etc/nginx/nginx.conf
+
+if ! sudo nginx -t; then
+  # Put it back
+  cp "$tmp_dir/nginx.conf" /etc/nginx/nginx.conf
+  exit 1
+fi
+
+if ps aux | egrep -v grep | egrep 'master process nginx'; then
+  sudo nginx -s reload
+else
+  sudo nginx
+fi
+
