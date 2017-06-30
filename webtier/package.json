@@ -1,6 +1,6 @@
 {
   "name": "sa-webtier",
-  "version": "0.1.1",
+  "version": "0.5.1",
   "description": "",
   "main": "webtier.js",
   "scripts": {
@@ -11,6 +11,6 @@
     "js2a": "^0.1.1",
     "mongodb": "^2.2.28",
     "routes": "^2.1.0",
-    "sgsg": "^0.9.3"
+    "sgsg": "^0.9.6"
   }
 }
