@@ -47,11 +47,11 @@ lib.upsertPartner = function(argv, context, callback) {
   return MongoClient.connect(mongoUrl, function(err, db) {
     if (err) { return sg.die(err, callback, 'upsertPartner.MongoClient.connect'); }
 
-    // If this is not one of the standard partners, do not upsertProject
     var partnerId = argvGet(argv, 'partner-id,partner');
     var projectId = argvGet(argv, 'project-id,project');
 
     return sg.__run([function(next) {
+      // If this is not one of the standard partners, do not upsertProject
       if (partnerId.match(/HP_[^_]+_(SERVICE|LIBRARY)/))  { return next(); }
 
       return projectDb.upsertProject({projectId}, context, next);

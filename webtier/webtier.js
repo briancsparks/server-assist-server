@@ -35,24 +35,24 @@ const main = function() {
   return MongoClient.connect(mongoHost, (err, db) => {
     if (err)      { return sg.die(err, `Could not connect to DB ${mongoHost}`); }
 
+    // The apps that we will be aware of
     var apps = [];
 
     sg.__run([function(next) {
+
+      // Add into apps a web-root object, if we are on a workstation
+      if (!isLocalWorkstation())  { return next(); }
 
       // ---------- Listen at root for dev workstations ----------
 
       // If we are on a local workstation, handle root as being sent to :3000, the typical
       // Node.js port.  We add an app object (same format as whats in the apps collection
       // in the DB.), and then inform that there is a webtier_router service.
-      if (isLocalWorkstation()) {
-        apps.push({appId:'web_root', mount:'/'});
-      }
+      apps.push({appId:'web_root', mount:'/'});
 
-      // When on a workstation, do a favor and install a route to the root
-      if (isLocalWorkstation()) {
-        fqdns.unshift('local.mobilewebassist.net');
-        registerMyService();
-      }
+      // On workstation, add local.mwa.net as an endpoint. It is in DNS as 127.0.0.1
+      fqdns.unshift('local.mobilewebassist.net');
+      registerMyService();
 
       return next();
 
@@ -62,6 +62,8 @@ const main = function() {
       }
 
     }, function(next) {
+
+      // ----------- Load apps from the DB ----------
       return routes.addRoutesToServers(db, servers, apps, (err) => {
         if (err) { console.error(`Failed to add servers`); }
 
@@ -76,7 +78,6 @@ const main = function() {
           //dumpReq(req, res);
 
           const pathname      = urlLib.parse(req.url).pathname;
-          var   resPayload    = `Result for ${pathname}`;
 
           const host          = req.headers.host;
           const serverRoutes  = servers[host] && servers[host].router;
@@ -86,21 +87,14 @@ const main = function() {
 
             if (route && _.isFunction(route.fn)) {
               return route.fn(req, res, route.params, route.splats, route);
-            } else {
-
-              // Did not match the route to any handler
-              res.statusCode  = 404;
-              resPayload      = `404 - Not Found: ${host} / ${pathname}`;
             }
 
-          } else {
-
-            // We do not know that server
-            res.statusCode  = 400;
-            resPayload      = "400 - Bad Request";
+            /* otherwise -- Did not match the route to any handler */
+            return sg._404(req, res, `${host} / ${pathname}`);
           }
 
-          res.end(resPayload+'\n');
+          /* otherwise */
+          return sg._400(req, res);
         });
       });
 
@@ -109,10 +103,12 @@ const main = function() {
         console.log(`${appName} running at http://${myIp}:${port}/`);
         console.log('');
 
-        next();
 
         // Inform of my webtier_router service
         registerMyService();
+
+        next();
+
         function registerMyService() {
           setTimeout(registerMyService, 750);
           registerAsService(appName, `http://${myIp}:${port}`, myIp, 4000);
@@ -140,8 +136,8 @@ const main = function() {
             if (err)                        { console.error(`Failed to (re)start nginx`); }
             if (exitCode !== 0 || signal)   { console.log(`${cmd}: exit: ${exitCode}, signal: ${signal}`); }
 
-            console.log(stderrChunks.join(''));
             console.log(stdoutChunks.join(''));
+            console.error(stderrChunks.join(''));
 
           });
         });

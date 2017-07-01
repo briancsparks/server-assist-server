@@ -1,0 +1,7 @@
+#!/bin/bash -e
+
+(cd webtier && pm2 start webtier.js --watch -- --vverbose --main)
+
+(cd ../attr-man && pm2 start attr-man.js --watch -- --vverbose --main)
+(cd ../attr-man/scripts && pm2 start udp-json.js --watch -- --vverbose --main)
+

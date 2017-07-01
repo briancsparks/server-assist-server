@@ -9,6 +9,7 @@
  */
 const sg                  = require('sgsg');
 const _                   = sg._;
+const serverassist        = require('serverassist');
 const MongoClient         = require('mongodb').MongoClient;
 const Router              = require('routes');
 const clusterLib          = require('js-cluster');
@@ -19,6 +20,7 @@ const lpad                = sg.lpad;
 const normlz              = sg.normlz;
 var   router              = Router();
 const ServiceList         = clusterLib.ServiceList;
+const isLocalWorkstation  = serverassist.isLocalWorkstation;
 
 const myIp                = process.env.SERVERASSIST_MY_IP          || '127.0.0.1';
 const utilIp              = process.env.SERVERASSIST_UTIL_HOSTNAME  || 'localhost';
@@ -59,6 +61,7 @@ lib.addRoutesToServers = function(db, servers, apps, callback) {
       if (err)    { error = err; next(); return false; }      // return false stops the enumeration
       if (!app)   { return next(); }                          // Done
 
+      // Add the app to the list
       apps.unshift(app);
     });
 
@@ -73,12 +76,21 @@ lib.addRoutesToServers = function(db, servers, apps, callback) {
     console.log('----------------------------------------------------------------------------------------------------------------------------------------------');
     sg.__each(apps, function(app, nextApp) {
 
-      var uriBase;
+      var uriBase, parts;
 
       var rewrite   = false;
       var appId     = app.appId;
       var projectId = app.projectId;
       var mount     = app.mount;
+
+      if (!appId && mount) {
+        parts = mount.split('/');
+        appId = _.compact([parts[0], _.last(parts)]).join('_');
+      }
+
+      if (!mount && (projectId && app.type && app.name)) {
+        mount = [projectId, app.type, app.name].join('/');
+      }
 
       // Make sure we have necessary components
       if (!appId)               { console.error(`No appId`); return; }
@@ -112,8 +124,8 @@ lib.addRoutesToServers = function(db, servers, apps, callback) {
         if (uriBase)              { return next(); }
         if (sg.isProduction())    { return sg.die(err, callback, 'no uriBase'); }
 
-        productId = _.first(app.mount.split('/'));
-        uriBase   = normlz(`local.mobilewebassist.net/${productId}`);
+        var subDomain   = isLocalWorkstation() ? 'local' : 'apps';
+        uriBase         = normlz(`${subDomain}.mobilewebassist.net/${_.first(app.mount.split('/'))}`);
 
         return next();
 
@@ -123,7 +135,7 @@ lib.addRoutesToServers = function(db, servers, apps, callback) {
         // uriBase (and uriTestBase) are the url-root of the project -- like: mobilewebassist.net/prj -- for the `prj` project
 
         // Fixup fqdn
-        uriBase = uriBase.replace(/^salocal[.]net/, 'local.mobilewebprint.net');
+        uriBase = uriBase.replace(/^salocal[.]net/, 'local.mobilewebassist.net');
 
         // Split the fqdn and the pathroot
         const [fqdn, root]    = shiftBy(uriBase, '/');      // or uriTestBase -- [ mobilewebassist.net, prj ]
@@ -162,6 +174,11 @@ lib.addRoutesToServers = function(db, servers, apps, callback) {
               res.statusCode = 404;
               res.end('Not Found');
               return;
+            }
+
+            if (!location) {
+              verbose(2, `Cannot find location for ${appId}`);
+              return sg._404(req, res);
             }
 
             const internalEndpoint  = location.replace(/^(http|https):[/][/]/i, '');

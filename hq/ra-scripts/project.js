@@ -18,6 +18,14 @@ var mongoUrl            = `mongodb://${dbHost}:27017/serverassist`;
 var everbose;
 var lib = {};
 
+/**
+ *  Upsert a project.
+ *
+ *      --project-id    -- The projectId (required)
+ *      --uri-base      -- The project's 'namespace' (fqdn/projectId)
+ *      --upstream      -- The project's default upstream.
+ *      --uri-test-base
+ */
 lib.upsertProject = function(argv, context, callback) {
   var result = { updates:[] };
 
