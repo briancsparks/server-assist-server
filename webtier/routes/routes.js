@@ -9,6 +9,7 @@
  */
 const sg                  = require('sgsg');
 const _                   = sg._;
+const urlLib              = require('url');
 const serverassist        = require('serverassist');
 const MongoClient         = require('mongodb').MongoClient;
 const Router              = require('routes');
@@ -28,8 +29,6 @@ const myColor             = process.env.SERVERASSIST_COLOR          || 'green';
 const myStack             = process.env.SERVERASSIST_STACK          || 'test';
 
 const serviceList         = new ServiceList(['serverassist', myColor, myStack].join('-'), utilIp);
-var   dbHost              = process.env.SERVERASSIST_DB_HOSTNAME || 'localhost';
-var   mongoUrl            = `mongodb://${dbHost}:27017/serverassist`;
 
 var shiftBy;
 var lib = {};
@@ -134,9 +133,6 @@ lib.addRoutesToServers = function(db, servers, apps, callback) {
         //-------------------------------------------------------------------------------------------------------------------------
         // uriBase (and uriTestBase) are the url-root of the project -- like: mobilewebassist.net/prj -- for the `prj` project
 
-        // Fixup fqdn
-        uriBase = uriBase.replace(/^salocal[.]net/, 'local.mobilewebassist.net');
-
         // Split the fqdn and the pathroot
         const [fqdn, root]    = shiftBy(uriBase, '/');      // or uriTestBase -- [ mobilewebassist.net, prj ]
 
@@ -156,7 +152,7 @@ lib.addRoutesToServers = function(db, servers, apps, callback) {
           // This is the function that handles the route: project.uriBase/app.mount/*
           // Use X-Accel-Redirect to tell nginx to send the request to the service.
 
-          verbose(3, `Handling ${fqdn} ${route}:`, {params}, {splats});
+          verbose(3, `Handling ${fqdn} route: ${route}, url:${req.url}:`, {params}, {splats});
 
           //-------------------------------------------------------------------------------------------------------------------------
           // Rewrite the url path -- so that a service can have some flexibility where it is mounted

@@ -1,0 +1,9 @@
+#!/bin/bash -e
+
+set +e
+pm2 delete webtier
+pm2 delete hq
+pm2 delete udp-json
+pm2 delete attr-man
+set -e
+

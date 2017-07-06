@@ -1,0 +1,9 @@
+#!/bin/bash -e
+
+set +e
+pm2 restart attr-man
+pm2 restart udp-json
+pm2 restart hq
+pm2 restart webtier
+set -e
+

@@ -48,10 +48,11 @@ const main = function() {
       // If we are on a local workstation, handle root as being sent to :3000, the typical
       // Node.js port.  We add an app object (same format as whats in the apps collection
       // in the DB.), and then inform that there is a webtier_router service.
-      apps.push({appId:'web_root', mount:'/'});
+      apps.push({appId:'web_root', mount:'/', projectId:'sa'});
 
       // On workstation, add local.mwa.net as an endpoint. It is in DNS as 127.0.0.1
-      fqdns.unshift('local.mobilewebassist.net');
+      //fqdns.unshift('local.mobilewebassist.net');
+
       registerMyService();
 
       return next();
@@ -75,7 +76,7 @@ const main = function() {
       // ---------- Run the server ----------
       const server = http.createServer((req, res) => {
         return sg.getBody(req, function() {
-          //dumpReq(req, res);
+          dumpReq(req, res);
 
           const pathname      = urlLib.parse(req.url).pathname;
 
@@ -120,7 +121,7 @@ const main = function() {
       // ---------- Build the nginx.conf file ----------
 
       // Generate the contents
-      return buildNginxConf({fqdns}, function(err, conf) {
+      return buildNginxConf({fqdns: _.keys(servers)}, function(err, conf) {
         if (err) { return sg.die(err, `Failed build nginx.conf file`); }
 
         // Save the file to a tmp location

@@ -2,30 +2,65 @@
 
 eval "$(cli-shezargs $@)"
 
-cd $script_dir
+scripts_dir="${start_dir}/${script_dir}"
+sara_scripts_dir="${scripts_dir}/../../../serverassist/ra-scripts"
+
+#echo "$scripts_dir"
+#echo "$sara_scripts_dir"
 
 # Each of the commands produces a JSON object, so turn this script's output into an array
 
 echo '['
-ra invoke ../ra-scripts/project.js upsertProject --project-id=mwp --uri-base=mobilewebprint.net/mwp/  --uri-test-base=mobiledevprint.net/mwp/
-echo -n ', '
 
-ra invoke ../ra-scripts/project.js upsertProject --project-id=sap --uri-base=mobilewebprint.net/sap/  --uri-test-base=mobiledevprint.net/sap/
-echo -n ', '
+if [[ -n $workstation ]]; then
+  [[ -d $sara_scripts_dir ]] || die "Cannot find serverassist ra-scripts dir ${sara_scripts_dir}"
 
-ra invoke ../ra-scripts/partner.js upsertPartner --project-id=sap --partner-id=VALASSIS
-echo -n ', '
+  cd $sara_scripts_dir
 
-# ---------- xcc
-#ra invoke ../ra-scripts/project.js upsertProject --project-id=xcc --uri-base=mobilewebassist.net/xcc/ --uri-test-base=mobiledevassist.net/xcc/
-ra invoke ../ra-scripts/project.js upsertProject --project-id=xcc --uri-base=local.mobilewebassist.net/xcc/ --uri-test-base=local.mobilewebassist.net/xcc/
-echo -n ', '
+  ra invoke ./models/project.js upsertProject --project-id=sa --uri-base=local.mobilewebassist.net/sa/
+  echo -n ', '
 
-ra invoke ../ra-scripts/app.js upsertApp --project-id=xcc --vetted=true --type=www --name=inspect --app-id=xcc_inspect --mount=xcc/www/inspect/ --rewrite=false
+  ra invoke ./models/project.js upsertProject --project-id=hq --uri-base=hq.local.mobilewebassist.net/
+  echo -n ', '
 
-# API for handling run-time debug info (telemetry) for xcc
-#ra invoke ../ra-scripts/app.js upsertApp --project-id=xcc --vetted=true --type=api --name=dbg-telemetry --app-id=xcc_dbgtelemetry --mount=xcc/api/v1/dbg-telemetry/ --rewrite=api/v1/dbg-telemetry/
+  ra invoke ./models/onramp.js  upsertOnramp --internal-name=test-green.mobilewebprint.net --version=12 --external-name=test.secureprint.api.hp.com/sap/api/v12/
+  echo -n ', '
 
+  ra invoke ./models/onramp.js  upsertOnramp --internal-name=local.mobilewebassist.net --version=1 --external-name=local.mobilewebassist.net/sa/api/v1/
+  echo -n ', '
+
+  ra invoke ./models/stack.js  upsertStack --stack=pub --color=green --state=main --fqdn=local.mobilewebassist.net
+  echo -n ', '
+
+elif [[ -n $mario ]]; then
+
+  [[ -d $sara_scripts_dir ]] || die "Cannot find serverassist ra-scripts dir ${sara_scripts_dir}"
+
+  cd $sara_scripts_dir
+
+  ra invoke ./models/project.js upsertProject --top-ns=hp --project-id=mwp --uri-base=mobilewebprint.net/mwp/  --uri-test-base=mobiledevprint.net/mwp/
+  echo -n ', '
+
+  ra invoke ./models/project.js upsertProject --top-ns=hp --project-id=sap --uri-base=mobilewebprint.net/sap/  --uri-test-base=mobiledevprint.net/sap/
+  echo -n ', '
+
+  ra invoke ./models/partner.js upsertPartner --top-ns=hp --project-id=sap --partner-id=VALASSIS
+  echo -n ', '
+
+elif [[ -n $xcc ]]; then
+
+  # ---------- xcc
+  cd $sara_scripts_dir
+
+  ra invoke ./models/project.js upsertProject --top-ns=hp --project-id=xcc --uri-base=local.mobilewebassist.net/xcc/ --uri-test-base=local.mobilewebassist.net/xcc/
+  echo -n ', '
+
+  ra invoke ./models/app.js upsertApp --project-id=xcc --vetted=true --type=www --name=inspect --app-id=xcc_inspect --mount=xcc/www/inspect/ --rewrite=false
+  echo -n ', '
+
+fi
+
+echo '""'
 echo ']'
 
 cd $start_dir

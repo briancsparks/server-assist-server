@@ -1,7 +1,12 @@
 #!/bin/bash -e
 
-(cd webtier && pm2 start webtier.js --watch -- --vverbose --main)
+eval "$(cli-shezargs $@)"
 
-(cd ../attr-man && pm2 start attr-man.js --watch -- --vverbose --main)
-(cd ../attr-man/scripts && pm2 start udp-json.js --watch -- --vverbose --main)
+cd "$script_dir/../.."
+
+(cd ../attr-man         && pm2 start attr-man.js  --watch -- --vverbose --main)
+(cd ../attr-man/scripts && pm2 start udp-json.js  --watch -- --vverbose --main)
+
+(cd hq                  && pm2 start hq.js        --watch -- --vverbose --main)
+(cd webtier             && pm2 start webtier.js   --watch -- --vverbose --main)
 
