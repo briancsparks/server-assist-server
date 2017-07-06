@@ -69,6 +69,8 @@ lib.build = function(argv, context, callback) {
                 servers = servers.concat(
                   ngx.server(function(ngx) {
                     return [
+
+                      ng.comment(`Server configuration for ${fqdn}`),
                       ng.listen(80),
                       ng.serverName(fqdn),
 
@@ -77,29 +79,30 @@ lib.build = function(argv, context, callback) {
 
                         _.each(methods, (method) => {
                           locations = locations.concat(
-                            ng.blankLine(),
-                            //ngx.location(`~* ^/rpxi/${method}/(.*)`, (ngx) => {})
-                            ngx.location(`~* ^/rpxi/${method}/([^/]+)/(.*)`, (ngx) => {
+
+                            ng.comment(`Reverse-proxy ${method} calls`),
+                            ngx.location(`~* ^/rpxi/${method}/(.*)`, (ngx) => {
                               return [
                                 ng.internal(),
+
+                                ng.blankLine(),
                                 ng.proxyConnectTimeout(5000),
                                 ng.proxySendTimeout(5000),
                                 ng.proxyReadTimeout(5000),
                                 ng.sendTimeout(5000),
-//                                ng.proxyRedirect(false),
 
+                                ng.blankLine(),
                                 ng.proxySetHeader('Host', '$http_host'),
                                 ng.proxySetHeader('X-Real-IP', '$remote_addr'),
                                 ng.proxySetHeader('X-Forwarded-For', '$proxy_add_x_forwarded_for'),
                                 ng.proxySetHeader('X-Forwarded-Proto', '$scheme'),
                                 ng.proxySetHeader('X-NginX-Proxy', true),
-//                                ng.proxySetHeader('Connection', ''),
 
-//                                ng.proxyHttpVersion('1.1'),
+                                ng.blankLine(),
+                                ng.proxyHttpVersion('1.1'),
                                 ng.proxyMethod(method),
-                                ng.set('$other_host', '$1'),
-                                ng.set('$other_uri', ' $2'),
-                                ng.proxyPass(`http://$other_host/$other_uri$is_args$args`)
+                                ng.set('$other_uri', ' $1'),
+                                ng.proxyPass(`http://$other_uri$is_args$args`)
 
                               ]
                             })
@@ -116,12 +119,15 @@ lib.build = function(argv, context, callback) {
                       ngx.location('@router', (ngx) => {
                         return [
                           ng.internal(),
+
+                          ng.blankLine(),
                           ng.proxyConnectTimeout(5000),
                           ng.proxySendTimeout(5000),
                           ng.proxyReadTimeout(5000),
                           ng.sendTimeout(5000),
                           ng.proxyRedirect(false),
 
+                          ng.blankLine(),
                           ng.proxySetHeader('X-Real-IP', '$remote_addr'),
                           ng.proxySetHeader('X-Forwarded-For', '$proxy_add_x_forwarded_for'),
                           ng.proxySetHeader('X-Forwarded-Proto', '$scheme'),
@@ -129,6 +135,7 @@ lib.build = function(argv, context, callback) {
                           ng.proxySetHeader('X-NginX-Proxy', true),
                           ng.proxySetHeader('Connection', ''),
 
+                          ng.blankLine(),
                           ng.proxyHttpVersion('1.1'),
                           ng.proxyPass(webtierRouter)
                         ]
@@ -137,12 +144,14 @@ lib.build = function(argv, context, callback) {
                       ng.blankLine(),
                       ngx.location('/', (ngx) => {
                         return [
+                          ng.blankLine(),
                           ng.proxyConnectTimeout(5000),
                           ng.proxySendTimeout(5000),
                           ng.proxyReadTimeout(5000),
                           ng.sendTimeout(5000),
                           ng.proxyRedirect(false),
 
+                          ng.blankLine(),
                           ng.proxySetHeader('X-Real-IP', '$remote_addr'),
                           ng.proxySetHeader('X-Forwarded-For', '$proxy_add_x_forwarded_for'),
                           ng.proxySetHeader('X-Forwarded-Proto', '$scheme'),
@@ -150,6 +159,7 @@ lib.build = function(argv, context, callback) {
                           ng.proxySetHeader('X-NginX-Proxy', true),
                           ng.proxySetHeader('Connection', ''),
 
+                          ng.blankLine(),
                           ng.proxyHttpVersion('1.1'),
                           ng.proxyPass(webtierRouter)
                         ]
