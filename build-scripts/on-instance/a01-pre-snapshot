@@ -1,0 +1,42 @@
+#!/bin/bash -e
+
+namespace="$NAMESPACE"
+
+eval "$(cli-shezargs $@)"
+
+#[[ which jsaws-set-env ]] || die "No jsaws-set-env found"
+which jsaws-set-env  || echo "No jsaws-set-env found"
+which jsaws-set-env  || exit 0
+
+# Show
+echo "----- Before pre-snapshotting -----"
+cat /etc/environment
+[[ -f $HOME/${namespace}_env      ]] && cat $HOME/${namespace}_env
+[[ -f $HOME/${namespace}_env.json ]] && cat $HOME/${namespace}_env.json | underscore print --color
+
+# Restore /etc/environment (remove vars, leave PATH)
+grep '^PATH' /etc/environment | sudo tee /etc/environment
+
+if [[ -n $namespace ]]; then
+  rm -f $HOME/${namespace}_env
+  rm -f $HOME/${namespace}_env.json
+fi
+
+jsaws-set-env NAMESPACE "$NAMESPACE"
+jsaws-set-env NPM_CONFIG_PREFIX "$NPM_CONFIG_PREFIX"
+jsaws-set-env NODE_PATH "$NODE_PATH"
+
+jsaws-set-env SERVERASSIST_SERVICE        "$SERVERASSIST_SERVICE"
+jsaws-set-env SERVERASSIST_TIER           "$SERVERASSIST_TIER"
+jsaws-set-env SERVERASSIST_DB_HOSTNAME    "$SERVERASSIST_DB_HOSTNAME"
+jsaws-set-env SERVERASSIST_DB_IP          "$SERVERASSIST_DB_IP"
+jsaws-set-env SERVERASSIST_UTIL_HOSTNAME  "$SERVERASSIST_UTIL_HOSTNAME"
+jsaws-set-env SERVERASSIST_UTIL_IP        "$SERVERASSIST_UTIL_IP"
+
+# Show
+echo "----- After pre-snapshotting -----"
+cat /etc/environment
+[[ -f $HOME/${namespace}_env      ]] && cat $HOME/${namespace}_env
+[[ -f $HOME/${namespace}_env.json ]] && cat $HOME/${namespace}_env.json | underscore print --color
+
+

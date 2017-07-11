@@ -47,6 +47,18 @@ elif [[ -n $mario ]]; then
   ra invoke ./models/partner.js upsertPartner --top-ns=hp --project-id=sap --partner-id=VALASSIS
   echo -n ', '
 
+elif [[ -n $server_assist ]]; then
+
+  [[ -d $sara_scripts_dir ]] || die "Cannot find serverassist ra-scripts dir ${sara_scripts_dir}"
+
+  cd $sara_scripts_dir
+
+  ra invoke ./models/project.js upsertProject --top-ns=hp --project-id=sa --uri-base=mobilewebassist.net/sa/ --uri-test-base=mobiledevassist.net/sa/
+  echo -n ', '
+
+  #ra invoke ./models/onramp.js  upsertOnramp --internal-name=test-green.mobilewebassist.net --version=1 --external-name=test.secureprint.api.hp.com/sap/api/v1/
+  #echo -n ', '
+
 elif [[ -n $xcc ]]; then
 
   # ---------- xcc

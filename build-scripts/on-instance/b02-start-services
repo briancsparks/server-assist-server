@@ -1,0 +1,21 @@
+#!/bin/bash -e
+
+eval "$(cli-shezargs $@)"
+
+if jsaws-build-block "install-repos" "Install repos"; then
+
+  if ! [[ -d ${HOME}/dev ]]; then
+    cd ~/dev
+
+    if [[ $service == web ]]; then
+      (cd server-assist-server/webtier && pm2 start webtier.js -- --vverbose --main)
+
+      if [[ $stack == cluster ]]; then
+        (cd server-assist-server/hq && pm2 start hq.js -- --vverbose --main)
+      fi
+    fi
+  fi
+
+  jsaws-build-block "install-repos" "done"
+fi
+

@@ -1,0 +1,4 @@
+#!/bin/bash -e
+
+# TODO: set env vars for running stackname, db, util, color
+

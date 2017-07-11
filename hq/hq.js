@@ -20,9 +20,9 @@ const registerAsService       = serverassist.registerAsService;
 const mongoHost               = serverassist.mongoHost();
 const myIp                    = serverassist.myIp();
 
-const appName                 = 'hq_hq';
+const appName                 = 'sa_hq';
 const mount                   = '/';
-const projectId               = 'hq';
+const projectId               = 'sa';
 
 const main = function() {
   return MongoClient.connect(mongoHost, (err, db) => {

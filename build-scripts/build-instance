@@ -1,0 +1,115 @@
+#!/bin/bash -e
+
+my_ip="$(curl -s 'http://169.254.169.254/latest/meta-data/local-ipv4')"
+
+[[ -n $NAMESPACE                    ]] && namespace="$NAMESPACE"
+[[ -n $JS_CLUSTER_DB_IP             ]] && db="$JS_CLUSTER_DB_IP"
+[[ -n $JS_CLUSTER_DB_HOSTNAME       ]] && db="$JS_CLUSTER_DB_HOSTNAME"
+[[ -n $JS_CLUSTER_UTIL_IP           ]] && util="$JS_CLUSTER_UTIL_IP"
+[[ -n $JS_CLUSTER_UTIL_HOSTNAME     ]] && util="$JS_CLUSTER_UTIL_HOSTNAME"
+
+# SERVERASSIST has precedence
+[[ -n $SERVERASSIST_DB_IP           ]] && db="$SERVERASSIST_DB_IP"
+[[ -n $SERVERASSIST_DB_HOSTNAME     ]] && db="$SERVERASSIST_DB_HOSTNAME"
+[[ -n $SERVERASSIST_UTIL_IP         ]] && util="$SERVERASSIST_UTIL_IP"
+[[ -n $SERVERASSIST_UTIL_HOSTNAME   ]] && util="$SERVERASSIST_UTIL_HOSTNAME"
+
+# The cheapest thing with high network
+instance_type="c4.xlarge"
+
+on_instance_build_dir="sa-build"
+
+eval "$(cli-shezargs $@)"
+
+die() {
+  echo "Usage: $0 options $@" 2>&1
+  echo ""
+  echo "          --service=app --ip=10.13.23.91 --key=serverassist_demo --bucket-namespace=mobilewebprint --stack=cluster" 2>&1
+  echo "          --service=app --ip=10.13.23.91 --key=serverassist_demo --bucket-namespace=mobilewebprint --stack=cluster" 2>&1
+  echo ""
+  echo "  Options:"
+  echo ""
+  echo "          --dry-run"
+  echo "          --ruby"
+  echo "          --skip-ami"
+  echo "          --no-terminate"
+  echo "          --build-number=20"
+  echo "          --db=10.13.21.229"
+  echo "          --util=10.13.21.4"
+  echo "          --namespace="
+  echo "          --image-id="
+  echo "          --instance-type="
+  echo "          --xvdf="
+  echo "          --color="
+  echo ""
+  echo "  $@"
+  echo ""
+  exit 1
+}
+
+
+
+
+if [[ -z $namespace ]];then
+  [[ -z $NAMESPACE ]] && die "Missing --namespace"
+
+  namespace="$NAMESPACE"
+fi
+
+[[ -z $build_number         ]] && build_number="$(ra invoke `fn ~/dev/ 'lib/ec2/ec2\.js$'` getNextBuildNumber --ns=${namespace} | underscore select '.build' --outfmt=text)"
+[[ -z $image_id             ]] && image_id="xenial2"
+
+[[ -n $ip                   ]] || die "Missing --ip"
+[[ -n $color                ]] || die "Missing --color"
+[[ -n $key                  ]] || die "Missing --key"
+[[ -n $instance_type        ]] || die "Missing --instance-type"
+[[ -n $build_number         ]] || die "Missing --build-number"
+[[ -n $bucket_namespace     ]] || die "Missing --bucket-namespace"
+[[ -n $service              ]] || die "Missing --service"
+[[ -n $stack                ]] || die "Missing --stack"
+
+# ----- Build up the cli parameters
+[[ -n $db                   ]] && run_instance_params="$run_instance_params --db=$db"
+[[ -n $util                 ]] && run_instance_params="$run_instance_params --util=$util"
+[[ -n $namespace            ]] && run_instance_params="$run_instance_params --namespace=$namespace"
+[[ -n $color                ]] && run_instance_params="$run_instance_params --color=$color"
+[[ -n $key                  ]] && run_instance_params="$run_instance_params --key=$key"
+[[ -n $ip                   ]] && run_instance_params="$run_instance_params --ip=${ip}"
+[[ -n $instance_type        ]] && run_instance_params="$run_instance_params --instance-type=$instance_type"
+[[ -n $image_id             ]] && run_instance_params="$run_instance_params --image-id=$image_id"
+
+[[ -n $xvdf                 ]] && run_instance_params="$run_instance_params --xvdf=$xvdf"
+
+# -------------------- Run Instance --------------------
+run_instance_result="/tmp/js-cluster-build-instance-$$.json"
+if [[ -z $dry_run ]]; then
+       ra invoke `fn ~/dev/ 'lib/ec2/ec2\.js$'` runInstance $run_instance_params | tee $run_instance_result | underscore print --color
+else
+  echo ra invoke `fn ~/dev/ 'lib/ec2/ec2\.js$'` runInstance $run_instance_params
+  exit 0
+fi
+
+# Get the actual IP from the result
+ip="$(cat $run_instance_result | underscore select '.InstanceId ~ .PrivateIpAddress' --outfmt=text)"
+instance_id="$(cat $run_instance_result | underscore select '.PrivateIpAddress ~ .InstanceId' --outfmt=text)"
+
+wait_for_start $ip
+
+# Copy buildout scripts
+sshix $ip "mkdir -p zz_packages/${on_instance_build_dir} zz_packages/build-logs"
+scpix -r ${script_dir}/* "${ip}:~/zz_packages/${on_instance_build_dir}/"
+
+# -------------------- aa-build-all --------------------
+
+                         build_all_params="$build_all_params ${bucket_namespace} ${service} --namespace=${namespace} --stack=${stack} --service=${service}"
+[[ -n $ruby       ]] &&  build_all_params="$build_all_params --ruby"
+
+echo ra invoke `fn ~/dev/ ssh\.js$` sshRun --ip=${ip} --command="./zz_packages/${on_instance_build_dir}/on-instance/aa-build-all ${build_all_params}" "--message=${service}-build"
+ra invoke `fn ~/dev/ ssh\.js$` sshRun --ip=${ip} --command="./zz_packages/${on_instance_build_dir}/on-instance/aa-build-all ${build_all_params}" "--message=${service}-build"
+
+# -------------------- Create AMI ----------------------
+echo ../../js-cluster/build-scripts/create-ami "$@" --on-instance-build-dir="${on_instance_build_dir}" --ip="${ip}" --instance-id="${instance_id}" --stack="${stack}" --service="${service}" --build-number="${build_number}" --namespace="${namespace}"
+
+../../js-cluster/build-scripts/create-ami "$@" --on-instance-build-dir="${on_instance_build_dir}" \
+        --ip="${ip}" --instance-id="${instance_id}" --stack="${stack}" --service="${service}" --build-number="${build_number}" --namespace="${namespace}"
+

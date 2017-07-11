@@ -44,6 +44,7 @@ const main = function() {
       if (!isLocalWorkstation())  { return next(); }
 
       // ---------- Listen at root for dev workstations ----------
+      console.log('--------- loading for workstation');
 
       // If we are on a local workstation, handle root as being sent to :3000, the typical
       // Node.js port.  We add an app object (same format as whats in the apps collection
