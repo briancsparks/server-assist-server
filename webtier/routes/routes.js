@@ -183,7 +183,7 @@ lib.addRoutesToServers = function(db, servers, apps, callback) {
         //-------------------------------------------------------------------------------------------------------------------------
         // uriBase (and uriTestBase) are the url-root of the project -- like: mobilewebassist.net/prj -- for the `prj` project
 
-        const addHandler = function(uriBase, handler) {
+        const addHandler = function(uriBase) {
           // Split the fqdn and the pathroot
           var [fqdn, root]    = shiftBy(uriBase, '/');      // or uriTestBase -- [ mobilewebassist.net, prj ]
 
@@ -202,10 +202,20 @@ lib.addRoutesToServers = function(db, servers, apps, callback) {
           servers[fqdn].router.addRoute(route, mkHandler(fqdn, route));
         };
 
-        addHandler(uriBase);
+        const subdomain = app.subdomain || '';
+        addHandler(`${subdomain}${uriBase}`);
 
         if (uriTestBase) {
-          addHandler(uriTestBase);
+          addHandler(`${subdomain}${uriTestBase}`);
+        }
+
+        // We need both on a workstation
+        if (isLocalWorkstation() && app.subdomain) {
+          addHandler(uriBase);
+
+          if (uriTestBase) {
+            addHandler(uriTestBase);
+          }
         }
 
         // ---------- End: run-time handler ----------

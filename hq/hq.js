@@ -60,7 +60,7 @@ const main = function() {
           }
 
           /* otherwise -- Did not match the route to any handler */
-          return sg._404(req, res, `${host} / ${pathname}`);
+          return sg._404(req, res, null, `Host ${host} is known, path ${pathname} is not.`);
         });
       });
 
@@ -69,7 +69,7 @@ const main = function() {
         //console.log(`${appName} running HQ at http://${myIp}:${port}/`);
 
         //console.log(`Registering app ${appName}, mount: ${mount}, id: ${projectId}`);
-        registerAsServiceApp(appName, mount, {projectId});
+        registerAsServiceApp(appName, mount, {projectId, subdomain:'hq.'});
         registerMyService();
 
         next();

@@ -77,7 +77,7 @@ lib.addRoutes = function(addRoute, db, callback) {
 
       const onError = function(error) {
         console.log('Client error while handling /clientStart', error);
-        return sg._400(req, res, error);
+        return sg._400(req, res, null, error);
       };
 
       const url     = urlLib.parse(req.url, true);

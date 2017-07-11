@@ -49,20 +49,26 @@ if [[ -n $server_assist ]]; then
 
   cd $sara_scripts_dir
 
+  # ---------- The serverassist (SA) project ----------
   ra_invoke ./models/project.js upsertProject --project-id=sa --top-ns=hp \
           --deploy-style=justX \
           --uri-base="${subdomain1}mobilewebassist.net/sa/" --uri-test-base="${subdomain1}mobiledevassist.net/sa/"
 
-  if [[ -z $workstation ]]; then
-    ra_invoke ./models/stack.js  upsertStack --project-id=sa --stack=pub  --color=green --state=main --fqdn=pub-green.mobilewebassist.net
-    ra_invoke ./models/stack.js  upsertStack --project-id=sa --stack=pub  --color=blue  --state=gone --fqdn=pub-blue.mobilewebassist.net
-    ra_invoke ./models/stack.js  upsertStack --project-id=sa --stack=pub  --color=teal  --state=gone --fqdn=pub-teal.mobilewebassist.net
-    ra_invoke ./models/stack.js  upsertStack --project-id=sa --stack=pub  --color=yelow --state=gone --fqdn=pub-yelow.mobilewebassist.net
+  # ---------- Insert the stacks ----------
 
-    ra_invoke ./models/stack.js  upsertStack --project-id=sa --stack=test --color=green --state=gone --fqdn=test-green.mobilewebassist.net
-    ra_invoke ./models/stack.js  upsertStack --project-id=sa --stack=test --color=blue  --state=gone --fqdn=test-blue.mobilewebassist.net
-    ra_invoke ./models/stack.js  upsertStack --project-id=sa --stack=test --color=teal  --state=gone --fqdn=test-teal.mobilewebassist.net
-    ra_invoke ./models/stack.js  upsertStack --project-id=sa --stack=test --color=yelow --state=gone --fqdn=test-yelow.mobilewebassist.net
+  # The main prod stack
+  ra_invoke ./models/stack.js  upsertStack --project-id=sa --stack=pub  --color=green --state=main --fqdn="green-pub.${subdomain1}mobilewebassist.net"
+
+  # Other stacks for colored deploys
+  if [[ -z $workstation ]]; then
+    ra_invoke ./models/stack.js  upsertStack --project-id=sa --stack=pub  --color=blue  --state=gone --fqdn=blue-pub.mobilewebassist.net
+    ra_invoke ./models/stack.js  upsertStack --project-id=sa --stack=pub  --color=teal  --state=gone --fqdn=teal-pub.mobilewebassist.net
+    ra_invoke ./models/stack.js  upsertStack --project-id=sa --stack=pub  --color=yelow --state=gone --fqdn=yelow-pub.mobilewebassist.net
+
+    ra_invoke ./models/stack.js  upsertStack --project-id=sa --stack=test --color=green --state=gone --fqdn=green-test.mobilewebassist.net
+    ra_invoke ./models/stack.js  upsertStack --project-id=sa --stack=test --color=blue  --state=gone --fqdn=blue-test.mobilewebassist.net
+    ra_invoke ./models/stack.js  upsertStack --project-id=sa --stack=test --color=teal  --state=gone --fqdn=teal-test.mobilewebassist.net
+    ra_invoke ./models/stack.js  upsertStack --project-id=sa --stack=test --color=yelow --state=gone --fqdn=yelow-test.mobilewebassist.net
 
   fi
 

@@ -93,11 +93,11 @@ const main = function() {
             }
 
             /* otherwise -- Did not match the route to any handler */
-            return sg._404(req, res, `${host} / ${pathname}`);
+            return sg._404(req, res, null, `Host ${host} is known, path ${pathname} is not.`);
           }
 
           /* otherwise */
-          return sg._400(req, res);
+          return sg._400(req, res, null, `Host ${host} is unknown.`);
         });
       });
 
