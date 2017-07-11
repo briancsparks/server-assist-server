@@ -2,6 +2,9 @@
 
 eval "$(cli-shezargs $@)"
 
+[[ -z $service ]] && service="$SERVERASSIST_SERVICE"
+[[ -z $stack   ]] && stack="$SERVERASSIST_STACK"
+
 if [[ $service == web ]]; then
   (cd ~/dev/server-assist-server/webtier && pm2 start webtier.js -- --vverbose --main)
 
