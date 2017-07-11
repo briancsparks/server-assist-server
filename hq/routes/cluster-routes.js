@@ -7,7 +7,7 @@ const _                       = sg._;
 
 var lib = {};
 
-lib.addRoutes = function(router, db, callback) {
+lib.addRoutes = function(addRoute, db, callback) {
   return callback();
 };
 

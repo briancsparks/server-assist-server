@@ -15,20 +15,24 @@ const router                  = require('routes')();
 const routes                  = require('./routes/routes');
 
 const ARGV                    = sg.ARGV();
+const mkAddRoute              = serverassist.mkAddRoute;
 const registerAsServiceApp    = serverassist.registerAsServiceApp;
 const registerAsService       = serverassist.registerAsService;
 const mongoHost               = serverassist.mongoHost();
 const myIp                    = serverassist.myIp();
 
 const appName                 = 'sa_hq';
-const mount                   = '/';
+const mount                   = '/sa/';
 const projectId               = 'sa';
 
 const main = function() {
   return MongoClient.connect(mongoHost, (err, db) => {
     if (err)      { return sg.die(err, `Could not connect to DB ${mongoHost}`); }
 
-    const port      = ARGV.port || 8400;
+    const port                = ARGV.port || 8400;
+    const myServiceLocation   = `http://${myIp}:${port}`;
+
+    const addRoute            = mkAddRoute(appName, router, myServiceLocation);
 
     return sg.__run([function(next) {
       // Do whatever for this specific server
@@ -36,7 +40,7 @@ const main = function() {
 
     // Load routes
     }, function(next) {
-      return routes.addRoutes(router, db, (err) => {
+      return routes.addRoutes(addRoute, db, (err) => {
         if (err)      { return sg.die(err, `Could not add routes`); }
 
         return next();
@@ -62,8 +66,9 @@ const main = function() {
 
       // ---------- Listen on --port ----------
       server.listen(port, myIp, () => {
-        console.log(`${appName} running HQ at http://${myIp}:${port}/`);
+        //console.log(`${appName} running HQ at http://${myIp}:${port}/`);
 
+        //console.log(`Registering app ${appName}, mount: ${mount}, id: ${projectId}`);
         registerAsServiceApp(appName, mount, {projectId});
         registerMyService();
 
@@ -71,7 +76,7 @@ const main = function() {
 
         function registerMyService() {
           setTimeout(registerMyService, 750);
-          registerAsService(appName, `http://${myIp}:${port}`, myIp, 4000);
+          registerAsService(appName, myServiceLocation, myIp, 4000);
         }
       });
 

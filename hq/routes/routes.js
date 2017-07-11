@@ -9,11 +9,11 @@ const clusterRoutes           = require('./cluster-routes');
 
 var lib = {};
 
-lib.addRoutes = function(router, db, callback) {
+lib.addRoutes = function(addRoute, db, callback) {
   return sg.__run([function(next) {
-    return clientStart.addRoutes(router, db, next);
+    return clientStart.addRoutes(addRoute, db, next);
   }, function(next) {
-    return clusterRoutes.addRoutes(router, db, next);
+    return clusterRoutes.addRoutes(addRoute, db, next);
   }], function() {
     return callback();
   });

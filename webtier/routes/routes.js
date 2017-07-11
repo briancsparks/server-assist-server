@@ -7,28 +7,29 @@
  *  when a request comes in for fqdn.net/pathroot/..., it gets sent to the running service
  *  (via X-Accel-Redirect.)
  */
-const sg                  = require('sgsg');
-const _                   = sg._;
-const urlLib              = require('url');
-const serverassist        = require('serverassist');
-const MongoClient         = require('mongodb').MongoClient;
-const Router              = require('routes');
-const clusterLib          = require('js-cluster');
+const sg                      = require('sgsg');
+const _                       = sg._;
+const urlLib                  = require('url');
+const serverassist            = require('serverassist');
+const MongoClient             = require('mongodb').MongoClient;
+const Router                  = require('routes');
+const clusterLib              = require('js-cluster');
 
-const ARGV                = sg.ARGV();
-const verbose             = sg.verbose;
-const lpad                = sg.lpad;
-const normlz              = sg.normlz;
-var   router              = Router();
-const ServiceList         = clusterLib.ServiceList;
-const isLocalWorkstation  = serverassist.isLocalWorkstation;
+const ARGV                    = sg.ARGV();
+const verbose                 = sg.verbose;
+const lpad                    = sg.lpad;
+const pad                     = sg.pad;
+const normlz                  = sg.normlz;
+var   router                  = Router();
+const ServiceList             = clusterLib.ServiceList;
+const isLocalWorkstation      = serverassist.isLocalWorkstation;
 
-const myIp                = process.env.SERVERASSIST_MY_IP          || '127.0.0.1';
-const utilIp              = process.env.SERVERASSIST_UTIL_HOSTNAME  || 'localhost';
-const myColor             = process.env.SERVERASSIST_COLOR          || 'green';
-const myStack             = process.env.SERVERASSIST_STACK          || 'test';
+const myIp                    = process.env.SERVERASSIST_MY_IP          || '127.0.0.1';
+const utilIp                  = process.env.SERVERASSIST_UTIL_HOSTNAME  || 'localhost';
+const myColor                 = process.env.SERVERASSIST_COLOR          || 'green';
+const myStack                 = process.env.SERVERASSIST_STACK          || 'test';
 
-const serviceList         = new ServiceList(['serverassist', myColor, myStack].join('-'), utilIp);
+const serviceList             = new ServiceList(['serverassist', myColor, myStack].join('-'), utilIp);
 
 var shiftBy;
 var lib = {};
@@ -75,7 +76,7 @@ lib.addRoutesToServers = function(db, servers, apps, callback) {
     console.log('----------------------------------------------------------------------------------------------------------------------------------------------');
     sg.__each(apps, function(app, nextApp) {
 
-      var uriBase, parts;
+      var uriBase, uriTestBase, parts;
 
       var rewrite   = false;
       var appId     = app.appId;
@@ -111,7 +112,8 @@ lib.addRoutesToServers = function(db, servers, apps, callback) {
             if (err)                { return sg.die(err, callback, '.find(projectId)'); }
             if (!project)           { return next(); }
 
-            uriBase = project.uriBase;
+            uriBase     = project.uriBase;
+            uriTestBase = project.uriTestBase || uriTestBase;
           });
         }
 
@@ -130,63 +132,82 @@ lib.addRoutesToServers = function(db, servers, apps, callback) {
 
       }], function() {
 
-        //-------------------------------------------------------------------------------------------------------------------------
-        // uriBase (and uriTestBase) are the url-root of the project -- like: mobilewebassist.net/prj -- for the `prj` project
-
-        // Split the fqdn and the pathroot
-        const [fqdn, root]    = shiftBy(uriBase, '/');      // or uriTestBase -- [ mobilewebassist.net, prj ]
-
-        // Add the fqdn/route
-        servers[fqdn]         = servers[fqdn]         || {};
-        servers[fqdn].router  = servers[fqdn].router  || Router();
-
-        const route = normlz(`/${mount}/*`);
-        console.log(`Mounting ${lpad(appId, 20)} at ${lpad(fqdn, 20)}: ${route}`);
-
         //=========================================================================================================================
         // The run-time handler
         //=========================================================================================================================
 
-        servers[fqdn].router.addRoute(route, function(req, res, params, splats) {
+        const mkHandler = function(fqdn, route) {
+          const handler = function(req, res, params, splats) {
 
-          // This is the function that handles the route: project.uriBase/app.mount/*
-          // Use X-Accel-Redirect to tell nginx to send the request to the service.
+            // This is the function that handles the route: project.uriBase/app.mount/*
+            // Use X-Accel-Redirect to tell nginx to send the request to the service.
 
-          verbose(3, `Handling ${fqdn} route: ${route}, url:${req.url}:`, {params}, {splats});
+            verbose(3, `Handling ${fqdn} route: ${route}, url:${req.url}:`, {params}, {splats});
 
-          //-------------------------------------------------------------------------------------------------------------------------
-          // Rewrite the url path -- so that a service can have some flexibility where it is mounted
+            //-------------------------------------------------------------------------------------------------------------------------
+            // Rewrite the url path -- so that a service can have some flexibility where it is mounted
 
-          // Default to 'no change'
-          var rewritten = req.url;
+            // Default to 'no change'
+            var rewritten = req.url;
 
-          // rewrite was set to app.rewrite above
-          if (rewrite === false)                { rewritten = req.url; }        // Nothing
-          else if (_.isString(rewrite))         { rewritten = normlz(`/${rewrite}/${splats}`); }        // TODO Add search
+            // rewrite was set to app.rewrite above
+            if (rewrite === false)                { rewritten = req.url; }        // Nothing
+            else if (_.isString(rewrite))         { rewritten = normlz(`/${rewrite}/${splats}`); }        // TODO Add search
 
-          // ---------- Get the location of the service
-          return serviceList.getOneService(app.appId, (err, location) => {
-            if (err) {
-              res.statusCode = 404;
-              res.end('Not Found');
-              return;
-            }
+            // ---------- Get the location of the service
+            return serviceList.getOneService(app.appId, (err, location) => {
+              if (err) {
+                res.statusCode = 404;
+                res.end('Not Found');
+                return;
+              }
 
-            if (!location) {
-              verbose(2, `Cannot find location for ${appId}`);
-              return sg._404(req, res);
-            }
+              if (!location) {
+                verbose(2, `Cannot find location for ${appId}`);
+                return sg._404(req, res);
+              }
 
-            const internalEndpoint  = location.replace(/^(http|https):[/][/]/i, '');
-            const redir             = normlz(`/rpxi/${req.method}/${internalEndpoint}/${rewritten}`);
+              const internalEndpoint  = location.replace(/^(http|https):[/][/]/i, '');
+              const redir             = normlz(`/rpxi/${req.method}/${internalEndpoint}/${rewritten}`);
 
-            verbose(2, `${appId} ->> ${redir}`);
+              verbose(2, `${appId} ->> ${redir}`);
 
-            res.statusCode = 200;
-            res.setHeader('X-Accel-Redirect', redir);
-            res.end('');
-          });
-        });
+              res.statusCode = 200;
+              res.setHeader('X-Accel-Redirect', redir);
+              res.end('');
+            });
+          };
+          return handler;
+        };
+
+        //-------------------------------------------------------------------------------------------------------------------------
+        // uriBase (and uriTestBase) are the url-root of the project -- like: mobilewebassist.net/prj -- for the `prj` project
+
+        const addHandler = function(uriBase, handler) {
+          // Split the fqdn and the pathroot
+          var [fqdn, root]    = shiftBy(uriBase, '/');      // or uriTestBase -- [ mobilewebassist.net, prj ]
+
+          // Is this HQ?
+          if (process.env.SERVERASSIST_STACK === 'cluster') {
+            fqdn = `hq.${fqdn}`;
+          }
+
+          // Add the fqdn/route
+          servers[fqdn]         = servers[fqdn]         || {};
+          servers[fqdn].router  = servers[fqdn].router  || Router();
+
+          const route = normlz(`/${mount}/*`);
+          console.log(`Mounting ${lpad(appId, 20)} at ${pad(fqdn, 30)} ${route}`);
+
+          servers[fqdn].router.addRoute(route, mkHandler(fqdn, route));
+        };
+
+        addHandler(uriBase);
+
+        if (uriTestBase) {
+          addHandler(uriTestBase);
+        }
+
         // ---------- End: run-time handler ----------
 
         return nextApp();

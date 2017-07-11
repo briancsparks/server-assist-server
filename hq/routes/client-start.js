@@ -12,18 +12,18 @@ const setOn                   = sg.setOn;
 const deref                   = sg.deref;
 const skip                    = sg.skip;
 const reason                  = sg.reason;
-const addRoute                = serverassist.addRoute;
 const isLocalWorkstation      = serverassist.isLocalWorkstation;
 const models                  = serverassist.raScripts.models;
 const getIds                  = serverassist.raScripts.getIds;
 
 var lib = {};
 
-lib.addRoutes = function(router, db, callback) {
+lib.addRoutes = function(addRoute, db, callback) {
   var handlers = {}, determine = {}, translate = {}, determiness = {}, translators = {};
 
   const stacksDb    = db.collection('stacks');
   const onrampsDb   = db.collection('onramps');
+  const projectsDb  = db.collection('projects');
 
   const isSpecialClient = function(clientId) {
     if (clientId === '7B9qPWSIRh2EXElr4IQcLyrV3540klkqpjLpVtRuElSxyzWU5Tct0pNqA7cJDgnJ')  { return true; }
@@ -33,19 +33,40 @@ lib.addRoutes = function(router, db, callback) {
   };
 
   return sg.__run(function main() {
-    // main()
 
-    //determiness.greenBlueByService('hq', 12, 'gen2_app');
+    return projectsDb.find({}).toArray((err, projects_) => {
+      if (err)  { return sg.die(err, callback, 'clientStart-main'); }
 
-    if (isLocalWorkstation()) {
-      determiness.justX('hq', 1, 'prod');
-      translators.onramp('hq', 1);
-    }
+      // Loop over the kinds of determiness (deploy styles) we have
+      var projects = sg.extend(projects_);
+      _.each(determiness, (fn, fnDeployStyle) => {
 
-    addRoute(router, '/:project/api/:version', '/clientStart', handlers.clientStart);
-    addRoute(router, '/:project',              '/clientStart', handlers.clientStart);
+        projects = _.filter(projects, project => {
+          if (project.deployStyle === fnDeployStyle) {
+            determiness[project.deployStyle](project.projectId, 'prod');
+            return false;
+          }
 
-    return callback();
+          return true;
+        });
+      });
+
+      // Remaining projects get the justX style
+      _.each(projects, project => {
+        determiness.justX(project.projectId, 'prod');
+      });
+
+      // All projects are onramps
+      var projects = sg.extend(projects_);
+      _.each(projects, project => {
+        translators.onramp(project.projectId);
+      });
+
+      addRoute('/:project/api/:version', '/clientStart', handlers.clientStart);
+      addRoute('/:project',              '/clientStart', handlers.clientStart);
+
+      return callback();
+    });
 
   // ---------- The determine and translate functions ----------
   }, [function(next) {
@@ -135,7 +156,10 @@ lib.addRoutes = function(router, db, callback) {
 
         var determine_;
         if (!projectId)                                               { return onError(`do not have projectId`); }
-        if (!(determine_ = deref(determine, [projectId, version])))   { return onError(`do not have determine fn for ${projectId}.${version}`); }
+
+        determine_ = deref(determine, [projectId, version]) || deref(determine, projectId);
+
+        if (!determine_)                                              { return onError(`do not have determine fn for ${projectId}.${version}`); }
 
         return determine_(req, res, match, result, function(err) {
           if (err)  { return onError(err); }
@@ -147,7 +171,10 @@ lib.addRoutes = function(router, db, callback) {
 
         var translate_;
         if (!projectId)                                               { return onError(`do not have projectId`); }
-        if (!(translate_ = deref(translate, [projectId, version])))   { return onError(`do not have translate fn for ${projectId}.${version}`); }
+
+        translate_ = deref(translate, [projectId, version]) || deref(translate, projectId);
+
+        if (!translate_)                                              { return onError(`do not have translate fn for ${projectId}.${version}`); }
 
         return translate_(req, res, match, result, function(err) {
           if (err)  { return onError(err); }
@@ -212,12 +239,10 @@ lib.addRoutes = function(router, db, callback) {
     /**
      *  Knows that the app has 'main' and 'next' style apps
      */
-    determiness.greenBlueByService = function(projectName, version, serviceName_) {
-      determine[projectName]          = determine[projectName]          || {};
-
+    determiness.greenBlueByService = function(projectName, serviceName_) {
       const serviceName = serviceName_ || projectName;
 
-      determine[projectName][version] = function(req, res, match, result, callback) {
+      determine[projectName] = function(req, res, match, result, callback) {
 
         return sg.__run([function(next) {
           return getServiceFromUpstream(result.upstream, req.serverassist.partnerId, serviceName, function(err, service) {
@@ -243,9 +268,10 @@ lib.addRoutes = function(router, db, callback) {
       };
     };
 
-    determiness.justX = function(projectName, version, stack) {
-      determine[projectName]          = determine[projectName]          || {};
-      determine[projectName][version] = function(req, res, match, result, callback) {
+    determiness.justX = function(projectName, stack) {
+      console.log(`clientStart-determiness-justX ${projectName} ${stack}`)
+
+      determine[projectName] = function(req, res, match, result, callback) {
         result.upstream = stack;
         return callback(null, result);
       };
@@ -277,8 +303,9 @@ lib.addRoutes = function(router, db, callback) {
       });
     };
 
-    translators.onramp = function(projectName, version) {
-      setOn(translate, [projectName, version], function(req, res, match, result, callback) {
+    translators.onramp = function(projectName) {
+      console.log(`clientStart-translators-onramp ${projectName}`)
+      setOn(translate, projectName, function(req, res, match, result, callback) {
         return translate.simple.v1(req, res, match, result, function(err) {
           return onrampsDb.find({internalName: result.upstream}).limit(1).next(function(err, onramp) {
             if (err)    { console.error(err); return callback(err); }
