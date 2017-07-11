@@ -1,7 +1,5 @@
 #!/bin/bash -e
 
-my_ip="$(curl -s 'http://169.254.169.254/latest/meta-data/local-ipv4')"
-
 [[ -n $NAMESPACE                    ]] && namespace="$NAMESPACE"
 [[ -n $JS_CLUSTER_DB_IP             ]] && db="$JS_CLUSTER_DB_IP"
 [[ -n $JS_CLUSTER_DB_HOSTNAME       ]] && db="$JS_CLUSTER_DB_HOSTNAME"
@@ -23,6 +21,8 @@ eval "$(cli-shezargs $@)"
 
 die() {
   echo "Usage: $0 options $@" 2>&1
+  echo ""
+  echo "  (cd ~/dev/server-assist-server && time ./build-scripts/build-instance --key=mario_demo --bucket-namespace=mobilewebprint --service=web --stack=cluster --ip=10.13.0.10 --color=green --skip-ami)"
   echo ""
   echo "          --service=app --ip=10.13.23.91 --key=serverassist_demo --bucket-namespace=mobilewebprint --stack=cluster" 2>&1
   echo "          --service=app --ip=10.13.23.91 --key=serverassist_demo --bucket-namespace=mobilewebprint --stack=cluster" 2>&1
@@ -48,7 +48,15 @@ die() {
 }
 
 
+# These do not have automatic fixes. Fail early for them
+[[ -n $ip                   ]] || die "Missing --ip"
+[[ -n $color                ]] || die "Missing --color"
+[[ -n $key                  ]] || die "Missing --key"
+[[ -n $bucket_namespace     ]] || die "Missing --bucket-namespace"
+[[ -n $service              ]] || die "Missing --service"
+[[ -n $stack                ]] || die "Missing --stack"
 
+my_ip="$(curl -s 'http://169.254.169.254/latest/meta-data/local-ipv4')"
 
 if [[ -z $namespace ]];then
   [[ -z $NAMESPACE ]] && die "Missing --namespace"
@@ -62,18 +70,8 @@ fi
 ra invoke `fn $HOME/dev/ 'lib/ec2/ec2\.js$'` getAmiIdsForBuild --namespace="${namespace}" --base-name="${base_name}" > /tmp/amis-for-build-${namespace}-${build_number}.json
 image_id="$(cat /tmp/amis-for-build-${namespace}-${build_number}.json | underscore 'select' '.base .imageId' --outfmt=text)"
 
-cat /tmp/amis-for-build-${namespace}-${build_number}.json | underscore print --color
-
-echo $image_id
-
-[[ -n $ip                   ]] || die "Missing --ip"
-[[ -n $color                ]] || die "Missing --color"
-[[ -n $key                  ]] || die "Missing --key"
 [[ -n $instance_type        ]] || die "Missing --instance-type"
 [[ -n $build_number         ]] || die "Missing --build-number"
-[[ -n $bucket_namespace     ]] || die "Missing --bucket-namespace"
-[[ -n $service              ]] || die "Missing --service"
-[[ -n $stack                ]] || die "Missing --stack"
 
 # ----- Build up the cli parameters
 [[ -n $db                   ]] && run_instance_params="$run_instance_params --db=$db"

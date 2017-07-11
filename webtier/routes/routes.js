@@ -187,11 +187,6 @@ lib.addRoutesToServers = function(db, servers, apps, callback) {
           // Split the fqdn and the pathroot
           var [fqdn, root]    = shiftBy(uriBase, '/');      // or uriTestBase -- [ mobilewebassist.net, prj ]
 
-          // Is this HQ?
-          if (process.env.SERVERASSIST_STACK === 'cluster') {
-            fqdn = `hq.${fqdn}`;
-          }
-
           // Add the fqdn/route
           servers[fqdn]         = servers[fqdn]         || {};
           servers[fqdn].router  = servers[fqdn].router  || Router();
