@@ -57,7 +57,10 @@ if [[ -z $namespace ]];then
 fi
 
 [[ -z $build_number         ]] && build_number="$(ra invoke `fn ~/dev/ 'lib/ec2/ec2\.js$'` getNextBuildNumber --ns=${namespace} | underscore select '.build' --outfmt=text)"
-[[ -z $image_id             ]] && image_id="xenial2"
+[[ -z $base_nane            ]] && base_name="xenial"
+
+ra invoke `fn $HOME/dev/ 'lib/ec2/ec2\.js$'` getAmiIdsForBuild --namespace="${namespace}" --base-name="${base_name}" > /tmp/amis-for-build-${namespace}-${build_number}.json
+image_id="$(cat /tmp/amis-for-build-${namespace}-${build_number}.json | underscore 'select' '.base .imageId' --outfmt=text)"
 
 [[ -n $ip                   ]] || die "Missing --ip"
 [[ -n $color                ]] || die "Missing --color"
@@ -109,8 +112,6 @@ ra invoke `fn ~/dev/ ssh\.js$` sshRun --ip=${ip} --command="./zz_packages/${on_i
 
 # -------------------- Create AMI ----------------------
 js_cluster_dir="${script_dir}/../../js-cluster"
-echo ${js_cluster_dir}/build-scripts/create-ami "$@" --on-instance-build-dir="${on_instance_build_dir}" --ip="${ip}" --instance-id="${instance_id}" --stack="${stack}" --service="${service}" --build-number="${build_number}" --namespace="${namespace}"
-
-${js_cluster_dir}/build-scripts/create-ami "$@" --on-instance-build-dir="${on_instance_build_dir}" \
+${js_cluster_dir}/build-scripts/create-ami "$@" --on-instance-build-dir="${on_instance_build_dir}" --base-name=${base_name} \
         --ip="${ip}" --instance-id="${instance_id}" --stack="${stack}" --service="${service}" --build-number="${build_number}" --namespace="${namespace}"
 
