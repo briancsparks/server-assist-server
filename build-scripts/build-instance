@@ -57,10 +57,14 @@ if [[ -z $namespace ]];then
 fi
 
 [[ -z $build_number         ]] && build_number="$(ra invoke `fn ~/dev/ 'lib/ec2/ec2\.js$'` getNextBuildNumber --ns=${namespace} | underscore select '.build' --outfmt=text)"
-[[ -z $base_nane            ]] && base_name="xenial"
+[[ -z $base_name            ]] && base_name="xenial"
 
 ra invoke `fn $HOME/dev/ 'lib/ec2/ec2\.js$'` getAmiIdsForBuild --namespace="${namespace}" --base-name="${base_name}" > /tmp/amis-for-build-${namespace}-${build_number}.json
 image_id="$(cat /tmp/amis-for-build-${namespace}-${build_number}.json | underscore 'select' '.base .imageId' --outfmt=text)"
+
+cat /tmp/amis-for-build-${namespace}-${build_number}.json | underscore print --color
+
+echo $image_id
 
 [[ -n $ip                   ]] || die "Missing --ip"
 [[ -n $color                ]] || die "Missing --color"
