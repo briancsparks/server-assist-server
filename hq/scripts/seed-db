@@ -2,8 +2,14 @@
 
 eval "$(cli-shezargs $@)"
 
+ra_invoke() {
+  ra invoke "$@"
+  echo -n ', '
+}
+
 scripts_dir="${start_dir}/${script_dir}"
-sara_scripts_dir="${scripts_dir}/../../../serverassist/ra-scripts"
+scripts_project_dir="${scripts_dir}/../.."
+sara_scripts_dir="${scripts_project_dir}/../serverassist/ra-scripts"
 
 #echo "$scripts_dir"
 #echo "$sara_scripts_dir"
@@ -15,22 +21,54 @@ echo '['
 if [[ -n $workstation ]]; then
   [[ -d $sara_scripts_dir ]] || die "Cannot find serverassist ra-scripts dir ${sara_scripts_dir}"
 
+#  cd $sara_scripts_dir
+#
+#  ra invoke ./models/project.js upsertProject --project-id=sa --uri-base=local.mobilewebassist.net/sa/
+#  echo -n ', '
+#
+#  ra invoke ./models/project.js upsertProject --project-id=hq --uri-base=hq.local.mobilewebassist.net/
+#  echo -n ', '
+#
+#  ra invoke ./models/onramp.js  upsertOnramp --internal-name=test-green.mobilewebprint.net --version=12 --external-name=test.secureprint.api.hp.com/sap/api/v12/
+#  echo -n ', '
+#
+#  ra invoke ./models/onramp.js  upsertOnramp --internal-name=local.mobilewebassist.net --version=1 --external-name=local.mobilewebassist.net/sa/api/v1/
+#  echo -n ', '
+#
+#  ra invoke ./models/stack.js  upsertStack --stack=pub --color=green --state=main --fqdn=local.mobilewebassist.net
+#  echo -n ', '
+
+  subdomain1="local."
+else
+  subdomain1=""
+fi
+
+if [[ -n $server_assist ]]; then
+
+  [[ -d $sara_scripts_dir ]] || die "Cannot find serverassist ra-scripts dir ${sara_scripts_dir}"
+
   cd $sara_scripts_dir
 
-  ra invoke ./models/project.js upsertProject --project-id=sa --uri-base=local.mobilewebassist.net/sa/
-  echo -n ', '
+  ra_invoke ./models/project.js upsertProject --project-id=sa --top-ns=hp \
+          --deploy-style=justX \
+          --uri-base="${subdomain1}mobilewebassist.net/sa/" --uri-test-base="${subdomain1}mobiledevassist.net/sa/"
 
-  ra invoke ./models/project.js upsertProject --project-id=hq --uri-base=hq.local.mobilewebassist.net/
-  echo -n ', '
+  if [[ -z $workstation ]]; then
+    ra_invoke ./models/stack.js  upsertStack --project-id=sa --stack=pub  --color=green --state=main --fqdn=pub-green.mobilewebassist.net
+    ra_invoke ./models/stack.js  upsertStack --project-id=sa --stack=pub  --color=blue  --state=gone --fqdn=pub-blue.mobilewebassist.net
+    ra_invoke ./models/stack.js  upsertStack --project-id=sa --stack=pub  --color=teal  --state=gone --fqdn=pub-teal.mobilewebassist.net
+    ra_invoke ./models/stack.js  upsertStack --project-id=sa --stack=pub  --color=yelow --state=gone --fqdn=pub-yelow.mobilewebassist.net
 
-  ra invoke ./models/onramp.js  upsertOnramp --internal-name=test-green.mobilewebprint.net --version=12 --external-name=test.secureprint.api.hp.com/sap/api/v12/
-  echo -n ', '
+    ra_invoke ./models/stack.js  upsertStack --project-id=sa --stack=test --color=green --state=gone --fqdn=test-green.mobilewebassist.net
+    ra_invoke ./models/stack.js  upsertStack --project-id=sa --stack=test --color=blue  --state=gone --fqdn=test-blue.mobilewebassist.net
+    ra_invoke ./models/stack.js  upsertStack --project-id=sa --stack=test --color=teal  --state=gone --fqdn=test-teal.mobilewebassist.net
+    ra_invoke ./models/stack.js  upsertStack --project-id=sa --stack=test --color=yelow --state=gone --fqdn=test-yelow.mobilewebassist.net
 
-  ra invoke ./models/onramp.js  upsertOnramp --internal-name=local.mobilewebassist.net --version=1 --external-name=local.mobilewebassist.net/sa/api/v1/
-  echo -n ', '
+  fi
 
-  ra invoke ./models/stack.js  upsertStack --stack=pub --color=green --state=main --fqdn=local.mobilewebassist.net
-  echo -n ', '
+  #ra invoke ./models/onramp.js  upsertOnramp --internal-name=test-green."${subdomain1}`mobilewebassist.net --version=1 --external-name=test.secureprint.api.hp.com/sap/api/v1/
+  #echo -n ', '
+
 
 elif [[ -n $mario ]]; then
 
@@ -46,18 +84,6 @@ elif [[ -n $mario ]]; then
 
   ra invoke ./models/partner.js upsertPartner --top-ns=hp --project-id=sap --partner-id=VALASSIS
   echo -n ', '
-
-elif [[ -n $server_assist ]]; then
-
-  [[ -d $sara_scripts_dir ]] || die "Cannot find serverassist ra-scripts dir ${sara_scripts_dir}"
-
-  cd $sara_scripts_dir
-
-  ra invoke ./models/project.js upsertProject --top-ns=hp --project-id=sa --uri-base=mobilewebassist.net/sa/ --uri-test-base=mobiledevassist.net/sa/
-  echo -n ', '
-
-  #ra invoke ./models/onramp.js  upsertOnramp --internal-name=test-green.mobilewebassist.net --version=1 --external-name=test.secureprint.api.hp.com/sap/api/v1/
-  #echo -n ', '
 
 elif [[ -n $xcc ]]; then
 

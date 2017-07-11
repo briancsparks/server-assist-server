@@ -108,8 +108,9 @@ echo ra invoke `fn ~/dev/ ssh\.js$` sshRun --ip=${ip} --command="./zz_packages/$
 ra invoke `fn ~/dev/ ssh\.js$` sshRun --ip=${ip} --command="./zz_packages/${on_instance_build_dir}/on-instance/aa-build-all ${build_all_params}" "--message=${service}-build"
 
 # -------------------- Create AMI ----------------------
-echo ../../js-cluster/build-scripts/create-ami "$@" --on-instance-build-dir="${on_instance_build_dir}" --ip="${ip}" --instance-id="${instance_id}" --stack="${stack}" --service="${service}" --build-number="${build_number}" --namespace="${namespace}"
+js_cluster_dir="${script_dir}/../../js-cluster"
+echo ${js_cluster_dir}/build-scripts/create-ami "$@" --on-instance-build-dir="${on_instance_build_dir}" --ip="${ip}" --instance-id="${instance_id}" --stack="${stack}" --service="${service}" --build-number="${build_number}" --namespace="${namespace}"
 
-../../js-cluster/build-scripts/create-ami "$@" --on-instance-build-dir="${on_instance_build_dir}" \
+${js_cluster_dir}/build-scripts/create-ami "$@" --on-instance-build-dir="${on_instance_build_dir}" \
         --ip="${ip}" --instance-id="${instance_id}" --stack="${stack}" --service="${service}" --build-number="${build_number}" --namespace="${namespace}"
 
