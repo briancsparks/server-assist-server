@@ -123,11 +123,13 @@ lib.addRoutesToServers = function(db, servers, apps, callback) {
       }, function(next) {
 
         if (uriBase)              { return next(); }
-        if (sg.isProduction())    { return sg.die(err, callback, 'no uriBase'); }
+        if (sg.isProduction())    { return sg.die("ENO_URIBASE", callback, 'no uriBase'); }
 
+        //var subDomain   = isLocalWorkstation() ? 'local.apps' : 'apps';
         var subDomain   = isLocalWorkstation() ? 'local' : 'apps';
         uriBase         = normlz(`${subDomain}.mobilewebassist.net/${_.first(app.mount.split('/'))}`);
 
+        console.error(`-----\nWARNING: uriBase could not be found for ${app.appId}, using computed: ${uriBase}\nWARNING: This will not happen in prod.\n-----`);
         return next();
 
       }], function() {
@@ -170,7 +172,7 @@ lib.addRoutesToServers = function(db, servers, apps, callback) {
               const internalEndpoint  = location.replace(/^(http|https):[/][/]/i, '');
               const redir             = normlz(`/rpxi/${req.method}/${internalEndpoint}/${rewritten}`);
 
-              verbose(2, `${appId} ->> ${redir}`);
+              verbose(2, `${fqdn}: ${appId} ->> ${redir}`);
 
               res.statusCode = 200;
               res.setHeader('X-Accel-Redirect', redir);
