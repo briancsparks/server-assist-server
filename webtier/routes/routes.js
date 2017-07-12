@@ -199,19 +199,28 @@ lib.addRoutesToServers = function(db, servers, apps, callback) {
           servers[fqdn].router.addRoute(route, mkHandler(fqdn, route));
         };
 
-        const subdomain = app.subdomain || '';
-        addHandler(`${subdomain}${uriBase}`);
-
-        if (uriTestBase) {
-          addHandler(`${subdomain}${uriTestBase}`);
+        var addNormal, addSub;
+        if (app.subdomain && process.env.SERVERASSIST_STACK === 'hq') {
+          addSub = true;
         }
 
-        // We need both on a workstation
-        if (isLocalWorkstation() && app.subdomain) {
+        if (!addSub || isLocalWorkstation()) {
+          addNormal = true;
+        }
+
+        if (addNormal) {
           addHandler(uriBase);
 
           if (uriTestBase) {
             addHandler(uriTestBase);
+          }
+        }
+
+        if (addSub) {
+          addHandler(`${app.subdomain}${uriBase}`);
+
+          if (uriTestBase) {
+            addHandler(`${app.subdomain}${uriTestBase}`);
           }
         }
 
