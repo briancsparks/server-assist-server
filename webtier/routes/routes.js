@@ -10,7 +10,8 @@
 const sg                      = require('sgsg');
 const _                       = sg._;
 const urlLib                  = require('url');
-const serverassist            = require('serverassist');
+//const serverassist            = require('serverassist');
+const serverassist            = require('../../../serverassist');
 const MongoClient             = require('mongodb').MongoClient;
 const Router                  = require('routes');
 const clusterLib              = require('js-cluster');
@@ -199,12 +200,15 @@ lib.addRoutesToServers = function(db, servers, apps, callback) {
           servers[fqdn].router.addRoute(route, mkHandler(fqdn, route));
         };
 
-        var addNormal, addSub;
-        if (app.subdomain && (process.env.SERVERASSIST_STACK === 'cluster' || isLocalWorkstation())) {
-          addSub = true;
+        var addNormal, addSubdomain, subdomain;
+        if (app.subdomain) {
+          addSubdomain = true;
+          if (app.subdomain === 'hq.') {
+            addSubdomain = (process.env.SERVERASSIST_STACK === 'cluster' || isLocalWorkstation());
+          }
         }
 
-        if (!addSub || isLocalWorkstation()) {
+        if (!addSubdomain || isLocalWorkstation()) {
           addNormal = true;
         }
 
@@ -216,11 +220,15 @@ lib.addRoutesToServers = function(db, servers, apps, callback) {
           }
         }
 
-        if (addSub) {
-          addHandler(`${app.subdomain}${uriBase}`);
+        if (addSubdomain) {
+          if ((subdomain = app.subdomain) === '.') {
+            subdomain = `${process.env.SERVERASSIST_COLOR}-${process.env.SERVERASSIST_STACK}.`;
+          }
+
+          addHandler(`${subdomain}${uriBase}`);
 
           if (uriTestBase) {
-            addHandler(`${app.subdomain}${uriTestBase}`);
+            addHandler(`${subdomain}${uriTestBase}`);
           }
         }
 
