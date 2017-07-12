@@ -52,6 +52,9 @@ if [[ -n $server_assist ]]; then
   # ---------- The serverassist (SA) project ----------
   ra_invoke ./models/project.js upsertProject --project-id=sa --top-ns=hp \
           --deploy-style=justX \
+          --aws-dev-key=mario_demo --aws-prod-key=mario_prod --aws-hq-key=HQ \
+          --bucket-namespace=mobilewebprint \
+          --cluster-class-b=13 --test-class-b=15 --prod-class-b=12 \
           --uri-base="${subdomain1}mobilewebassist.net/sa/" --uri-test-base="${subdomain1}mobiledevassist.net/sa/"
 
   # ---------- Insert the stacks ----------

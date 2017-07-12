@@ -14,15 +14,14 @@
 
 # The cheapest thing with high network
 instance_type="c4.xlarge"
-
-on_instance_build_dir="sa-build"
+on_instance_build_dir="build-sa"
 
 eval "$(cli-shezargs $@)"
 
 die() {
   echo "Usage: $0 options $@" 2>&1
   echo ""
-  echo "  (cd ~/dev/server-assist-server && time ./build-scripts/build-instance --key=mario_demo --bucket-namespace=mobilewebprint --service=web --stack=cluster --ip=10.13.0.10 --color=green --skip-ami)"
+  echo "  (cd ~/dev/server-assist-server && time ./build-scripts/build-instance --service=web --stack=cluster --color=green --skip-ami)"
   echo ""
   echo "          --service=app --ip=10.13.23.91 --key=serverassist_demo --bucket-namespace=mobilewebprint --stack=cluster" 2>&1
   echo "          --service=app --ip=10.13.23.91 --key=serverassist_demo --bucket-namespace=mobilewebprint --stack=cluster" 2>&1
@@ -49,14 +48,51 @@ die() {
 
 
 # These do not have automatic fixes. Fail early for them
-[[ -n $ip                   ]] || die "Missing --ip"
+[[ -n $stack                ]] || die "Missing --stack"
 [[ -n $color                ]] || die "Missing --color"
+[[ -n $service              ]] || die "Missing --service"
+
+config="/tmp/config-$$.json"
+ra invoke "$(fn ~/dev/ 'serverassist/ra-scripts/models/project\.js$')" findProject --id=sa > "${config}"
+
+if   [[ $stack =~ ^pub      ]]; then   config_key="$(jsaws-get $config '.awsProdKey')";  config_class_b="$(jsaws-get $config '.prodClassB')"
+elif [[ $stack =~ ^prod     ]]; then   config_key="$(jsaws-get $config '.awsProdKey')";  config_class_b="$(jsaws-get $config '.prodClassB')"
+elif [[ $stack =~ ^cluster  ]]; then   config_key="$(jsaws-get $config '.awsDevKey')";   config_class_b="$(jsaws-get $config '.clusterClassB')"
+elif [[ $stack =~ ^test     ]]; then   config_key="$(jsaws-get $config '.awsDevKey')";   config_class_b="$(jsaws-get $config '.testClassB')"
+elif [[ $stack =~ ^dev      ]]; then   config_key="$(jsaws-get $config '.awsDevKey')";   config_class_b="$(jsaws-get $config '.testClassB')"
+elif [[ $stack =~ ^burn     ]]; then   config_key="$(jsaws-get $config '.awsDevKey')";   config_class_b="$(jsaws-get $config '.testClassB')"
+fi
+
+if   [[ $service =~ ^web    ]]; then   config_class_d="10"
+elif [[ $service =~ ^rip    ]]; then   config_class_d="16"
+elif [[ $service =~ ^app    ]]; then   config_class_d="32"
+elif [[ $service =~ ^netapp ]]; then   config_class_d="100"
+elif [[ $service =~ ^cont   ]]; then   config_class_d="200"
+elif [[ $service =~ ^util   ]]; then   config_class_d="4"
+elif [[ $service =~ ^db     ]]; then   config_class_d="220"
+fi
+
+if   [[ $color == green     && $service =~ ^web   ]]; then   config_class_c="0"
+elif [[ $color == blue      && $service =~ ^web   ]]; then   config_class_c="1"
+elif [[ $color == teal      && $service =~ ^web   ]]; then   config_class_c="2"
+elif [[ $color == yellow    && $service =~ ^web   ]]; then   config_class_c="3"
+
+elif [[ $color == green     ]]; then   config_class_c="21"
+elif [[ $color == blue      ]]; then   config_class_c="22"
+elif [[ $color == teal      ]]; then   config_class_c="23"
+elif [[ $color == yellow    ]]; then   config_class_c="24"
+fi
+
+[[ -z $key                ]] && key="$config_key"
+[[ -z $bucket_namespace   ]] && bucket_namespace="$(jsaws-get $config '.bucketNamespace')"
+
+if [[ -z $ip ]]; then
+  ip="10.${config_class_b}.${config_class_c}.${config_class_d}"
+fi
+
+[[ -n $ip                   ]] || die "Missing --ip"
 [[ -n $key                  ]] || die "Missing --key"
 [[ -n $bucket_namespace     ]] || die "Missing --bucket-namespace"
-[[ -n $service              ]] || die "Missing --service"
-[[ -n $stack                ]] || die "Missing --stack"
-
-my_ip="$(curl -s 'http://169.254.169.254/latest/meta-data/local-ipv4')"
 
 if [[ -z $namespace ]];then
   [[ -z $NAMESPACE ]] && die "Missing --namespace"
@@ -64,11 +100,12 @@ if [[ -z $namespace ]];then
   namespace="$NAMESPACE"
 fi
 
-[[ -z $build_number         ]] && build_number="$(ra invoke `fn ~/dev/ 'lib/ec2/ec2\.js$'` getNextBuildNumber --ns=${namespace} | underscore select '.build' --outfmt=text)"
+[[ -z $build_number         ]] && build_number="$(jsaws-ec2 getNextBuildNumber --ns=${namespace} | underscore select '.build' --outfmt=text)"
 [[ -z $base_name            ]] && base_name="xenial"
 
-ra invoke `fn $HOME/dev/ 'lib/ec2/ec2\.js$'` getAmiIdsForBuild --namespace="${namespace}" --base-name="${base_name}" > /tmp/amis-for-build-${namespace}-${build_number}.json
-image_id="$(cat /tmp/amis-for-build-${namespace}-${build_number}.json | underscore 'select' '.base .imageId' --outfmt=text)"
+amis="/tmp/amis-for-build-${namespace}-${build_number}.json"
+jsaws-ec2 getAmiIdsForBuild --namespace="${namespace}" --base-name="${base_name}" > "$amis"
+image_id="$(jsaws-get $amis '.base .imageId')"
 
 [[ -n $instance_type        ]] || die "Missing --instance-type"
 [[ -n $build_number         ]] || die "Missing --build-number"
@@ -86,19 +123,19 @@ image_id="$(cat /tmp/amis-for-build-${namespace}-${build_number}.json | undersco
 [[ -n $xvdf                 ]] && run_instance_params="$run_instance_params --xvdf=$xvdf"
 
 # -------------------- Run Instance --------------------
-run_instance_result="/tmp/js-cluster-build-instance-$$.json"
-if [[ -z $dry_run ]]; then
-       ra invoke `fn ~/dev/ 'lib/ec2/ec2\.js$'` runInstance $run_instance_params | tee $run_instance_result | underscore print --color
-else
-  echo ra invoke `fn ~/dev/ 'lib/ec2/ec2\.js$'` runInstance $run_instance_params
+echo jsaws-ec2 runInstance $run_instance_params
+if [[ -n $dry_run ]]; then
   exit 0
 fi
 
-# Get the actual IP from the result
-ip="$(cat $run_instance_result | underscore select '.InstanceId ~ .PrivateIpAddress' --outfmt=text)"
-instance_id="$(cat $run_instance_result | underscore select '.PrivateIpAddress ~ .InstanceId' --outfmt=text)"
+run_instance_result="/tmp/js-cluster-build-instance-$$.json"
+jsaws-ec2 runInstance $run_instance_params | tee $run_instance_result | underscore print --color
 
-wait_for_start $ip
+# Get the actual IP from the result
+ip="$(jsaws-get $run_instance_result '.InstanceId ~ .PrivateIpAddress')"
+instance_id="$(jsaws-get $run_instance_result '.PrivateIpAddress ~ .InstanceId')"
+
+wait_for_start "$ip"
 
 # Copy buildout scripts
 sshix $ip "mkdir -p zz_packages/${on_instance_build_dir} zz_packages/build-logs"
@@ -106,11 +143,10 @@ scpix -r ${script_dir}/* "${ip}:~/zz_packages/${on_instance_build_dir}/"
 
 # -------------------- aa-build-all --------------------
 
-                         build_all_params="$build_all_params ${bucket_namespace} ${service} --namespace=${namespace} --stack=${stack} --service=${service}"
-[[ -n $ruby       ]] &&  build_all_params="$build_all_params --ruby"
+build_all_params="$build_all_params ${bucket_namespace} ${service} --namespace=${namespace} --stack=${stack} --service=${service}"
 
-echo ra invoke `fn ~/dev/ ssh\.js$` sshRun --ip=${ip} --command="./zz_packages/${on_instance_build_dir}/on-instance/aa-build-all ${build_all_params}" "--message=${service}-build"
-ra invoke `fn ~/dev/ ssh\.js$` sshRun --ip=${ip} --command="./zz_packages/${on_instance_build_dir}/on-instance/aa-build-all ${build_all_params}" "--message=${service}-build"
+echo jsaws-ssh-run "$ip" "./zz_packages/${on_instance_build_dir}/on-instance/aa-build-all ${build_all_params}" "${service}-build"
+jsaws-ssh-run "$ip" "./zz_packages/${on_instance_build_dir}/on-instance/aa-build-all ${build_all_params}" "${service}-build"
 
 # -------------------- Create AMI ----------------------
 js_cluster_dir="${script_dir}/../../js-cluster"

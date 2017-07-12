@@ -14,3 +14,7 @@ if [[ $service == web ]]; then
 fi
 
 
+if [[ $service == netapp ]]; then
+  (cd ~/dev/attr-man && pm2 start attr-man.js -- --vverbose --main)
+fi
+
