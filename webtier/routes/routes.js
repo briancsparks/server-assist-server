@@ -200,7 +200,7 @@ lib.addRoutesToServers = function(db, servers, apps, callback) {
         };
 
         var addNormal, addSub;
-        if (app.subdomain && process.env.SERVERASSIST_STACK === 'hq') {
+        if (app.subdomain && (process.env.SERVERASSIST_STACK === 'cluster' || isLocalWorkstation())) {
           addSub = true;
         }
 
