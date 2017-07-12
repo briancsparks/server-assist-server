@@ -2,3 +2,5 @@
 
 # TODO: set env vars for running stackname, db, util, color
 
+jsaws-set-env SERVERASSIST_MY_IP "$(curl -s 'http://169.254.169.254/latest/meta-data/local-ipv4')"
+
