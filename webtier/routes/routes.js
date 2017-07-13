@@ -10,8 +10,7 @@
 const sg                      = require('sgsg');
 const _                       = sg._;
 const urlLib                  = require('url');
-//const serverassist            = require('serverassist');
-const serverassist            = require('../../../serverassist');
+const serverassist            = sg.include('serverassist') || require('serverassist');
 const MongoClient             = require('mongodb').MongoClient;
 const Router                  = require('routes');
 const clusterLib              = require('js-cluster');

@@ -1,8 +1,7 @@
 
 const sg                      = require('sgsg');
 const _                       = sg._;
-//const serverassist            = require('serverassist');
-const serverassist            = require('../../serverassist');
+const serverassist            = sg.include('serverassist') || require('serverassist');
 const http                    = require('http');
 const fs                      = require('fs');
 const path                    = require('path');
