@@ -84,17 +84,17 @@ if [[ -n $mobilewebassist_style ]]; then
   if [[ -z $workstation ]]; then
 
     # The main prod stack
-    ra_invoke ./models/stack.js  upsertStack --project-id="${project_id}" --stack=pub  --color=green --state=main   --fqdn="green-pub.${subdomain1}${domain_name}"
+    ra_invoke ./models/stack.js  upsertStack --project-id="${project_id}" --stack=pub  --color=green  --state=main --fqdn="green-pub.${subdomain1}${domain_name}"
 
     # Other stacks for colored deploys
-    ra_invoke ./models/stack.js  upsertStack --project-id="${project_id}" --stack=pub  --color=blue  --state=gone    --fqdn="blue-pub.${subdomain1}${domain_name}"
-    ra_invoke ./models/stack.js  upsertStack --project-id="${project_id}" --stack=pub  --color=teal  --state=gone    --fqdn="teal-pub.${subdomain1}${domain_name}"
-    ra_invoke ./models/stack.js  upsertStack --project-id="${project_id}" --stack=pub  --color=yelow --state=gone  --fqdn="yellow-pub.${subdomain1}${domain_name}"
+    ra_invoke ./models/stack.js  upsertStack --project-id="${project_id}" --stack=pub  --color=blue   --state=gone --fqdn="blue-pub.${subdomain1}${domain_name}"
+    ra_invoke ./models/stack.js  upsertStack --project-id="${project_id}" --stack=pub  --color=teal   --state=gone --fqdn="teal-pub.${subdomain1}${domain_name}"
+    ra_invoke ./models/stack.js  upsertStack --project-id="${project_id}" --stack=pub  --color=yellow --state=gone --fqdn="yellow-pub.${subdomain1}${domain_name}"
 
-    ra_invoke ./models/stack.js  upsertStack --project-id="${project_id}" --stack=test --color=green --state=gone  --fqdn="green-test.${subdomain1}${test_domain_name}"
-    ra_invoke ./models/stack.js  upsertStack --project-id="${project_id}" --stack=test --color=blue  --state=gone   --fqdn="blue-test.${subdomain1}${test_domain_name}"
-    ra_invoke ./models/stack.js  upsertStack --project-id="${project_id}" --stack=test --color=teal  --state=gone   --fqdn="teal-test.${subdomain1}${test_domain_name}"
-    ra_invoke ./models/stack.js  upsertStack --project-id="${project_id}" --stack=test --color=yelow --state=gone --fqdn="yellow-test.${subdomain1}${test_domain_name}"
+    ra_invoke ./models/stack.js  upsertStack --project-id="${project_id}" --stack=test --color=green  --state=gone --fqdn="green-test.${subdomain1}${test_domain_name}"
+    ra_invoke ./models/stack.js  upsertStack --project-id="${project_id}" --stack=test --color=blue   --state=gone --fqdn="blue-test.${subdomain1}${test_domain_name}"
+    ra_invoke ./models/stack.js  upsertStack --project-id="${project_id}" --stack=test --color=teal   --state=gone --fqdn="teal-test.${subdomain1}${test_domain_name}"
+    ra_invoke ./models/stack.js  upsertStack --project-id="${project_id}" --stack=test --color=yellow --state=gone --fqdn="yellow-test.${subdomain1}${test_domain_name}"
 
   else
 

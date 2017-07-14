@@ -19,18 +19,19 @@ on_instance_build_dir="build-sa"
 eval "$(cli-shezargs $@)"
 
 die() {
-  echo "Usage: $0 options $@" 2>&1
+  echo "  $@"
   echo ""
-  echo "  (cd ~/dev/server-assist-server && time ./build-scripts/build-instance --service=web --stack=cluster --color=green --skip-ami)"
+  echo "Usage: $0 --service= --stack= --color= [options]" 2>&1
   echo ""
-  echo "          --service=app --ip=10.13.23.91 --key=serverassist_demo --bucket-namespace=mobilewebprint --stack=cluster" 2>&1
-  echo "          --service=app --ip=10.13.23.91 --key=serverassist_demo --bucket-namespace=mobilewebprint --stack=cluster" 2>&1
+  echo "  ./build-scripts/build-instance --skip-ami --color=blue --service=web --stack=cluster"
   echo ""
   echo "  Options:"
   echo ""
   echo "          --dry-run"
-  echo "          --ruby"
   echo "          --skip-ami"
+  echo "          --ip="
+  echo "          --key="
+  echo "          --bucket-namespace="
   echo "          --no-terminate"
   echo "          --build-number=20"
   echo "          --db=10.13.21.229"
@@ -39,9 +40,6 @@ die() {
   echo "          --image-id="
   echo "          --instance-type="
   echo "          --xvdf="
-  echo "          --color="
-  echo ""
-  echo "  $@"
   echo ""
   exit 1
 }
