@@ -5,6 +5,7 @@
 const sg                      = require('sgsg');
 const _                       = sg._;
 const serverassist            = sg.include('serverassist') || require('serverassist');
+const clusterLib              = sg.include('js-cluster')   || require('js-cluster');
 const urlLib                  = require('url');
 
 const setOn                   = sg.setOn;
@@ -14,6 +15,10 @@ const reason                  = sg.reason;
 const isLocalWorkstation      = serverassist.isLocalWorkstation;
 const models                  = serverassist.raScripts.models;
 const getIds                  = serverassist.raScripts.getIds;
+const ClusterService          = clusterLib.Service;
+
+// Forward decl
+var getStackService;
 
 var lib = {};
 
@@ -31,6 +36,17 @@ lib.addRoutes = function(addRoute, db, callback) {
     return false;
   };
 
+  const debugLog = function(req) {
+    const args      = _.rest(arguments);
+    const clientId  = deref(req, 'serverassist.ids.clientId');
+
+    if (!clientId)  { return; }
+
+    if (isSpecialClient(clientId)) {
+      console.log.apply(console, args);
+    }
+  };
+
   return sg.__run(function main() {
 
     return projectsDb.find({}).toArray((err, projects_) => {
@@ -42,7 +58,11 @@ lib.addRoutes = function(addRoute, db, callback) {
 
         projects = _.filter(projects, project => {
           if (project.deployStyle === fnDeployStyle) {
-            determiness[project.deployStyle](project.projectId, 'prod');
+            if (project.deployArgs) {
+              determiness[project.deployStyle].apply(this, project.deployArgs);
+            } else {
+              determiness[project.deployStyle](project.projectId, 'prod');
+            }
             return false;
           }
 
@@ -105,6 +125,7 @@ lib.addRoutes = function(addRoute, db, callback) {
 
           req.serverassist.partner = partner;
           projectId = partner.projectId || projectId;
+          req.serverassist.ids.projectId = projectId;
           return next();
         });
 
@@ -220,12 +241,10 @@ lib.addRoutes = function(addRoute, db, callback) {
       return [parts[0], 'main'].join('_');
     }
 
-    const getServiceFromUpstream = function(upstream, partnerId, serviceName, callback) {
+    const getServiceFromUpstream = function(upstream, projectId, serviceName, callback) {
       var query = stackAlias(upstream || 'prod');
 
-      if (partnerId) {
-        query.partners = {$in:[partnerId]};
-      }
+      sg.setOnn(query, 'projectId', projectId);
 
       return stacksDb.find(query).toArray(function(err, stacks) {
         if (err || !stacks)       { return callback(); }
@@ -241,27 +260,39 @@ lib.addRoutes = function(addRoute, db, callback) {
     determiness.greenBlueByService = function(projectName, serviceName_) {
       const serviceName = serviceName_ || projectName;
 
+      console.log(`clientStart-determiness-greenBlueByService ${projectName} ${serviceName}`)
       determine[projectName] = function(req, res, match, result, callback) {
+        var clientId = deref(req, 'serverassist.ids.clientId') || 'nobody';
 
         return sg.__run([function(next) {
-          return getServiceFromUpstream(result.upstream, req.serverassist.partnerId, serviceName, function(err, service) {
-            if (err || !service)  { return next(); }    // Try the next option
+          return getServiceFromUpstream(result.upstream, req.serverassist.ids.projectId, serviceName, function(err, service) {
+            debugLog(req, `upstream: ${result.upstream} for ${clientId}, project: ${req.serverassist.ids.projectId}:${serviceName}: service:`, err, service);
+            if (err || !service || !_.isArray(service))  { return next(); }    // Try the next option
+            if (service.length < 1)                      { return next(); }    // Try the next option
+
             return callback(null, result);
           });
 
         }, function(next) {
           const fallback  = stackFallback(result.upstream);
-          if (!fallback)  { return next(); }
+          if (!fallback) {
+            debugLog(req, `no fallback upstream: ${result.upstream}`);
+            return next();
+          }
 
           result.upstream = fallback;
-          return getServiceFromUpstream(result.upstream, req.serverassist.partnerId, serviceName, function(err, service) {
-            if (err || !service)  { return next(); }    // Try the next option
+          return getServiceFromUpstream(result.upstream, req.serverassist.projectId, serviceName, function(err, service) {
+            debugLog(req, `fallback upstream: ${result.upstream} for ${clientId}, project: ${req.serverassist.ids.projectId}:${serviceName}: service:`, err, service);
+            if (err || !service || !_.isArray(service))  { return next(); }    // Try the next option
+            if (service.length < 1)                      { return next(); }    // Try the next option
+
             return callback(null, result);
           });
 
         }], function() {
           // Did not find it running. Just use prod
           result.upstream = 'prod';
+          debugLog(req, `settling for upstream: ${result.upstream}`);
           return callback(null, result);
         });
       };
@@ -351,6 +382,24 @@ lib.addRoutes = function(addRoute, db, callback) {
 
     return next();
   }]);
+};
+
+var servicesForAllStacks = {};
+const getServicesForStack = function(color, stack) {
+  servicesForAllStacks[color]         = servicesForAllStacks[color]         || {};
+  servicesForAllStacks[color][stack]  = servicesForAllStacks[color][stack]  || new ClusterService([process.env.NAMESPACE || 'mario', color, stack].join('-'), process.env.SERVERASSIST_UTIL_IP);
+
+  return servicesForAllStacks[color][stack];
+};
+
+getStackService = function(color, stack, name, callback) {
+  const clusterService = getServicesForStack(color, stack);
+  return clusterService.getServiceLocation(name, function(err, service) {
+    if (err)  { return callback(err); }
+
+    // Found the service
+    return callback(null, service);
+  });
 };
 
 _.each(lib, (v,k) => {
