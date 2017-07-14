@@ -51,7 +51,7 @@ die() {
 [[ -n $service              ]] || die "Missing --service"
 
 config="/tmp/config-$$.json"
-ra invoke "$(fn ~/dev/ 'serverassist/ra-scripts/models/project\.js$')" findProject --id=sa > "${config}"
+ra invoke "$(fn ~/dev/ 'serverassist/ra-scripts/project\.js$')" projectInfoForInstance --project-id=sa --color="${color}" --stack="${stack}" --service="${service}" > "${config}"
 
 if   [[ $stack =~ ^pub      ]]; then   config_key="$(jsaws-get $config '.awsProdKey')";  config_class_b="$(jsaws-get $config '.prodClassB')"
 elif [[ $stack =~ ^prod     ]]; then   config_key="$(jsaws-get $config '.awsProdKey')";  config_class_b="$(jsaws-get $config '.prodClassB')"
@@ -88,6 +88,8 @@ if [[ -z $ip ]]; then
   ip="10.${config_class_b}.${config_class_c}.${config_class_d}"
 fi
 
+fqdn="$(jsaws-get $config '.fqdn')"
+
 [[ -n $ip                   ]] || die "Missing --ip"
 [[ -n $key                  ]] || die "Missing --key"
 [[ -n $bucket_namespace     ]] || die "Missing --bucket-namespace"
@@ -117,6 +119,7 @@ image_id="$(jsaws-get $amis '.base .imageId')"
 [[ -n $ip                   ]] && run_instance_params="$run_instance_params --ip=${ip}"
 [[ -n $instance_type        ]] && run_instance_params="$run_instance_params --instance-type=$instance_type"
 [[ -n $image_id             ]] && run_instance_params="$run_instance_params --image-id=$image_id"
+[[ -n $fqdn                 ]] && run_instance_params="$run_instance_params --fqdn=${fqdn}"
 
 [[ -n $xvdf                 ]] && run_instance_params="$run_instance_params --xvdf=$xvdf"
 
@@ -149,5 +152,15 @@ jsaws-ssh-run "$ip" "./zz_packages/${on_instance_build_dir}/on-instance/aa-build
 # -------------------- Create AMI ----------------------
 js_cluster_dir="${script_dir}/../../js-cluster"
 ${js_cluster_dir}/build-scripts/create-ami "$@" --on-instance-build-dir="${on_instance_build_dir}" --base-name=${base_name} \
-        --ip="${ip}" --instance-id="${instance_id}" --stack="${stack}" --service="${service}" --build-number="${build_number}" --namespace="${namespace}"
+        --ip="${ip}" --instance-id="${instance_id}" --stack="${stack}" --service="${service}" --build-number="${build_number}" \
+        --namespace="${namespace}"
+
+# Assign FQDN, if approrpiate
+if [[ -n $skip_ami ]]; then
+
+  # The server should still be up
+  if [[ -n $fqdn ]]; then
+    jsaws-ec2 assignFqdnToInstance --instance-id="${instance_id}" --fqdn="${fqdn}" | underscore print --color
+  fi
+fi
 
