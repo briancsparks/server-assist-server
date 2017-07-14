@@ -29,6 +29,7 @@ if [[ -n $server_assist ]]; then
   test_domain_name="mobiledevassist.net"
   project_id="sa"
   top_ns="hp"
+  deploy_style="greenBlueByService"
   deploy_args="sa,sa_dbgtelemetry"
 
   onramp_version="1"
@@ -74,7 +75,7 @@ if [[ -n $mobilewebassist_style ]]; then
   "${scripts_dir}/seed-db-upsert-project" --project-id="${project_id}" --top-ns="${top_ns}" "${ws}" \
           --domain-name="${domain_name}" \
           --test-domain-name="${test_domain_name}" \
-          --deploy-style=justX \
+          --deploy-style="${deploy_style}" \
           --deploy-args="${deploy_args}" \
           --workstation-deploy-style=justX \
           --workstation-deploy-args="${project_id},prod" \
