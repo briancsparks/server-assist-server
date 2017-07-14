@@ -4,6 +4,7 @@
  */
 var sg                  = require('sgsg');
 var _                   = sg._;
+var serverassist        = sg.include('serverassist') || require('serverassist');
 var MongoClient         = require('mongodb').MongoClient;
 var partnerDb           = require('./partner');
 
@@ -12,8 +13,7 @@ var setOnn              = sg.setOnn;
 var argvGet             = sg.argvGet;
 var verbose             = sg.verbose;
 
-var dbHost              = process.env.SERVERASSIST_DB_HOSTNAME || 'localhost';
-var mongoUrl            = `mongodb://${dbHost}:27017/serverassist`;
+var mongoUrl            = serverassist.dbHost();
 
 var everbose;
 var lib = {};

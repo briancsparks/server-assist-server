@@ -7,106 +7,140 @@ ra_invoke() {
   echo -n ', '
 }
 
-scripts_dir="${start_dir}/${script_dir}"
 scripts_project_dir="${scripts_dir}/../.."
 sara_scripts_dir="${scripts_project_dir}/../serverassist/ra-scripts"
 
-#echo "$scripts_dir"
-#echo "$sara_scripts_dir"
 
 # Each of the commands produces a JSON object, so turn this script's output into an array
-
 echo '['
 
 if [[ -n $workstation ]]; then
-  [[ -d $sara_scripts_dir ]] || die "Cannot find serverassist ra-scripts dir ${sara_scripts_dir}"
-
-#  cd $sara_scripts_dir
-#
-#  ra invoke ./models/project.js upsertProject --project-id=sa --uri-base=local.mobilewebassist.net/sa/
-#  echo -n ', '
-#
-#  ra invoke ./models/project.js upsertProject --project-id=hq --uri-base=hq.local.mobilewebassist.net/
-#  echo -n ', '
-#
-#  ra invoke ./models/onramp.js  upsertOnramp --internal-name=test-green.mobilewebprint.net --version=12 --external-name=test.secureprint.api.hp.com/sap/api/v12/
-#  echo -n ', '
-#
-#  ra invoke ./models/onramp.js  upsertOnramp --internal-name=local.mobilewebassist.net --version=1 --external-name=local.mobilewebassist.net/sa/api/v1/
-#  echo -n ', '
-#
-#  ra invoke ./models/stack.js  upsertStack --stack=pub --color=green --state=main --fqdn=local.mobilewebassist.net
-#  echo -n ', '
-
   subdomain1="local."
+
 else
   subdomain1=""
+
 fi
 
 if [[ -n $server_assist ]]; then
 
-  [[ -d $sara_scripts_dir ]] || die "Cannot find serverassist ra-scripts dir ${sara_scripts_dir}"
+  mobilewebassist_style="1"
+  domain_name="mobilewebassist.net"
+  test_domain_name="mobiledevassist.net"
+  project_id="sa"
+  top_ns="hp"
 
-  cd $sara_scripts_dir
+  onramp_version="1"
 
-  # ---------- The serverassist (SA) project ----------
-  ra_invoke ./models/project.js upsertProject --project-id=sa --top-ns=hp \
-          --deploy-style=justX \
-          --aws-dev-key=mario_demo --aws-prod-key=mario_prod --aws-hq-key=HQ \
-          --bucket-namespace=mobilewebprint \
-          --cluster-class-b=13 --test-class-b=15 --prod-class-b=12 \
-          --uri-base="${subdomain1}mobilewebassist.net/sa/" --uri-test-base="${subdomain1}mobiledevassist.net/sa/"
+elif [[ -n $secure_print ]]; then
 
-  # ---------- Insert the stacks ----------
+  mobilewebassist_style="1"
+  domain_name="mobilewebprint.net"
+  test_domain_name="mobiledevprint.net"
+  project_id="sap"
+  top_ns="hp"
 
-  # The main prod stack
-  ra_invoke ./models/stack.js  upsertStack --project-id=sa --stack=pub  --color=green --state=main --fqdn="green-pub.${subdomain1}mobilewebassist.net"
-
-  # Other stacks for colored deploys
-  if [[ -z $workstation ]]; then
-    ra_invoke ./models/stack.js  upsertStack --project-id=sa --stack=pub  --color=blue  --state=gone --fqdn=blue-pub.mobilewebassist.net
-    ra_invoke ./models/stack.js  upsertStack --project-id=sa --stack=pub  --color=teal  --state=gone --fqdn=teal-pub.mobilewebassist.net
-    ra_invoke ./models/stack.js  upsertStack --project-id=sa --stack=pub  --color=yelow --state=gone --fqdn=yelow-pub.mobilewebassist.net
-
-    ra_invoke ./models/stack.js  upsertStack --project-id=sa --stack=test --color=green --state=gone --fqdn=green-test.mobilewebassist.net
-    ra_invoke ./models/stack.js  upsertStack --project-id=sa --stack=test --color=blue  --state=gone --fqdn=blue-test.mobilewebassist.net
-    ra_invoke ./models/stack.js  upsertStack --project-id=sa --stack=test --color=teal  --state=gone --fqdn=teal-test.mobilewebassist.net
-    ra_invoke ./models/stack.js  upsertStack --project-id=sa --stack=test --color=yelow --state=gone --fqdn=yelow-test.mobilewebassist.net
-
-  fi
-
-  #ra invoke ./models/onramp.js  upsertOnramp --internal-name=test-green."${subdomain1}`mobilewebassist.net --version=1 --external-name=test.secureprint.api.hp.com/sap/api/v1/
-  #echo -n ', '
-
+  apigee_onramp="1"
+  pub_onramp_subdomain="secureprint."
+  test_onramp_subdomain="test.secureprint."
+  onramp_version="12"
 
 elif [[ -n $mario ]]; then
 
-  [[ -d $sara_scripts_dir ]] || die "Cannot find serverassist ra-scripts dir ${sara_scripts_dir}"
+  mobilewebassist_style="1"
+  domain_name="mobilewebprint.net"
+  test_domain_name="mobiledevprint.net"
+  project_id="mwp"
+  top_ns="hp"
 
-  cd $sara_scripts_dir
-
-  ra invoke ./models/project.js upsertProject --top-ns=hp --project-id=mwp --uri-base=mobilewebprint.net/mwp/  --uri-test-base=mobiledevprint.net/mwp/
-  echo -n ', '
-
-  ra invoke ./models/project.js upsertProject --top-ns=hp --project-id=sap --uri-base=mobilewebprint.net/sap/  --uri-test-base=mobiledevprint.net/sap/
-  echo -n ', '
-
-  ra invoke ./models/partner.js upsertPartner --top-ns=hp --project-id=sap --partner-id=VALASSIS
-  echo -n ', '
-
-elif [[ -n $xcc ]]; then
-
-  # ---------- xcc
-  cd $sara_scripts_dir
-
-  ra invoke ./models/project.js upsertProject --top-ns=hp --project-id=xcc --uri-base=local.mobilewebassist.net/xcc/ --uri-test-base=local.mobilewebassist.net/xcc/
-  echo -n ', '
-
-  ra invoke ./models/app.js upsertApp --project-id=xcc --vetted=true --type=www --name=inspect --app-id=xcc_inspect --mount=xcc/www/inspect/ --rewrite=false
-  echo -n ', '
+  onramp_version="12"
 
 fi
 
+# ------------------------------------------------------------------------------------------------------------
+# Enter DB items
+
+if [[ -n $mobilewebassist_style ]]; then
+  [[ -d $sara_scripts_dir ]] || die "Cannot find serverassist ra-scripts dir ${sara_scripts_dir}"
+
+  [[ -n $workstation ]] && ws="--workstation"
+
+  cd $sara_scripts_dir
+
+  # ---------- The project ----------
+  "${scripts_dir}/seed-db-upsert-project" --project-id="${project_id}" --top-ns="${top_ns}" "${ws}" \
+          --domain-name="${domain_name}" \
+          --test-domain-name="${test_domain_name}" \
+          --deploy-style=justX \
+          --workstation-deploy-style=justX \
+          --aws-dev-key=mario_demo --aws-prod-key=mario_prod --aws-hq-key=HQ \
+          --bucket-namespace=mobilewebprint \
+          --cluster-class-b=13 --test-class-b=15 --prod-class-b=12 \
+          --uri-base="${subdomain1}${domain_name}/${project_id}/" \
+          --uri-test-base="${subdomain1}${test_domain_name}/${project_id}/"
+
+  # ---------- Insert the stacks ----------
+
+  if [[ -z $workstation ]]; then
+
+    # The main prod stack
+    ra_invoke ./models/stack.js  upsertStack --project-id="${project_id}" --stack=pub  --color=green --state=main   --fqdn="green-pub.${subdomain1}${domain_name}"
+
+    # Other stacks for colored deploys
+    ra_invoke ./models/stack.js  upsertStack --project-id="${project_id}" --stack=pub  --color=blue  --state=gone    --fqdn="blue-pub.${subdomain1}${domain_name}"
+    ra_invoke ./models/stack.js  upsertStack --project-id="${project_id}" --stack=pub  --color=teal  --state=gone    --fqdn="teal-pub.${subdomain1}${domain_name}"
+    ra_invoke ./models/stack.js  upsertStack --project-id="${project_id}" --stack=pub  --color=yelow --state=gone  --fqdn="yellow-pub.${subdomain1}${domain_name}"
+
+    ra_invoke ./models/stack.js  upsertStack --project-id="${project_id}" --stack=test --color=green --state=gone  --fqdn="green-test.${subdomain1}${test_domain_name}"
+    ra_invoke ./models/stack.js  upsertStack --project-id="${project_id}" --stack=test --color=blue  --state=gone   --fqdn="blue-test.${subdomain1}${test_domain_name}"
+    ra_invoke ./models/stack.js  upsertStack --project-id="${project_id}" --stack=test --color=teal  --state=gone   --fqdn="teal-test.${subdomain1}${test_domain_name}"
+    ra_invoke ./models/stack.js  upsertStack --project-id="${project_id}" --stack=test --color=yelow --state=gone --fqdn="yellow-test.${subdomain1}${test_domain_name}"
+
+  else
+
+    # The only stack
+    #ra_invoke ./models/stack.js  upsertStack --project-id="${project_id}" --stack=pub  --color=green --state=main             --fqdn="${subdomain1}${domain_name}"
+
+    ra_invoke ./models/stack.js  upsertStack --project-id="${project_id}" --stack=pub  --color=green --state=main  --fqdn="green-pub.${subdomain1}${domain_name}"
+
+  fi
+fi
+
+if [[ $apigee_onramp ]]; then
+  if [[ -z $workstation ]]; then
+    # The main prod stack
+    ra_invoke ./models/onramp.js upsertOnramp --project-id="${project_id}" --version="${onramp_version}"   --internal="green-pub.${subdomain1}${domain_name}" --external="${pub_onramp_subdomain}api.hp.com/${project_id}/green/api/v${onramp_version}"
+
+    # Other stacks for colored deploys
+    ra_invoke ./models/onramp.js upsertOnramp --project-id="${project_id}" --version="${onramp_version}"    --internal="blue-pub.${subdomain1}${domain_name}"  --external="${pub_onramp_subdomain}api.hp.com/${project_id}/blue/api/v${onramp_version}"
+    ra_invoke ./models/onramp.js upsertOnramp --project-id="${project_id}" --version="${onramp_version}"    --internal="teal-pub.${subdomain1}${domain_name}"  --external="${pub_onramp_subdomain}api.hp.com/${project_id}/teal/api/v${onramp_version}"
+    ra_invoke ./models/onramp.js upsertOnramp --project-id="${project_id}" --version="${onramp_version}"  --internal="yellow-pub.${subdomain1}${domain_name}"  --external="${pub_onramp_subdomain}api.hp.com/${project_id}/yellow/api/v${onramp_version}"
+
+    ra_invoke ./models/onramp.js upsertOnramp --project-id="${project_id}" --version="${onramp_version}"  --internal="green-test.${subdomain1}${domain_name}" --external="${test_onramp_subdomain}api.hp.com/${project_id}/green/api/v${onramp_version}"
+    ra_invoke ./models/onramp.js upsertOnramp --project-id="${project_id}" --version="${onramp_version}"   --internal="blue-test.${subdomain1}${domain_name}" --external="${test_onramp_subdomain}api.hp.com/${project_id}/blue/api/v${onramp_version}"
+    ra_invoke ./models/onramp.js upsertOnramp --project-id="${project_id}" --version="${onramp_version}"   --internal="teal-test.${subdomain1}${domain_name}" --external="${test_onramp_subdomain}api.hp.com/${project_id}/teal/api/v${onramp_version}"
+    ra_invoke ./models/onramp.js upsertOnramp --project-id="${project_id}" --version="${onramp_version}" --internal="yellow-test.${subdomain1}${domain_name}" --external="${test_onramp_subdomain}api.hp.com/${project_id}/yellow/api/v${onramp_version}"
+
+  else
+    # The only stack
+    ra_invoke ./models/onramp.js upsertOnramp --project-id="${project_id}" --version="${onramp_version}" --internal="green-pub.${subdomain1}${domain_name}" --external="${subdomain1}${domain_name}"
+
+  fi
+
+else
+  if [[ -z $workstation ]]; then
+    echo -n
+  else
+    # The only stack
+    ra_invoke ./models/onramp.js upsertOnramp --project-id="${project_id}" --version="${onramp_version}" --internal="green-pub.${subdomain1}${domain_name}" --external="${subdomain1}${domain_name}"
+
+  fi
+
+
+fi
+
+
+# ------------------------------------------------------------------------------------------------------------
 echo '""'
 echo ']'
 

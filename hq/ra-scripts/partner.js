@@ -12,8 +12,7 @@ var setOnn              = sg.setOnn;
 var argvGet             = sg.argvGet;
 var verbose             = sg.verbose;
 
-var dbHost              = process.env.SERVERASSIST_DB_HOSTNAME || 'localhost';
-var mongoUrl            = `mongodb://${dbHost}:27017/serverassist`;
+var mongoUrl            = serverassist.dbHost();
 
 var everbose;
 var lib = {};

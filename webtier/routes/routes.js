@@ -194,7 +194,7 @@ lib.addRoutesToServers = function(db, servers, apps, callback) {
           servers[fqdn].router  = servers[fqdn].router  || Router();
 
           const route = normlz(`/${mount}/*`);
-          console.log(`Mounting ${lpad(appId, 20)} at ${pad(fqdn, 30)} ${route}`);
+          console.log(`Mounting ${lpad(appId, 20)} at ${pad(fqdn, 49)} ${route}`);
 
           servers[fqdn].router.addRoute(route, mkHandler(fqdn, route));
         };
@@ -209,6 +209,9 @@ lib.addRoutesToServers = function(db, servers, apps, callback) {
 
         if (!addSubdomain || isLocalWorkstation()) {
           addNormal = true;
+          if (app.subdomain === 'hq.') {
+            addNormal = !isLocalWorkstation();
+          }
         }
 
         if (addNormal) {
@@ -221,7 +224,7 @@ lib.addRoutesToServers = function(db, servers, apps, callback) {
 
         if (addSubdomain) {
           if ((subdomain = app.subdomain) === '.') {
-            subdomain = `${process.env.SERVERASSIST_COLOR}-${process.env.SERVERASSIST_STACK}.`;
+            subdomain = `${process.env.SERVERASSIST_COLOR || 'green'}-${process.env.SERVERASSIST_STACK || 'pub'}.`;
           }
 
           addHandler(`${subdomain}${uriBase}`);
