@@ -1,6 +1,7 @@
 
 const sg                      = require('sgsg');
 const _                       = sg._;
+const request                 = sg.extlibs.superagent;
 const serverassist            = sg.include('serverassist') || require('serverassist');
 const http                    = require('http');
 const fs                      = require('fs');

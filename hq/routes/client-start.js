@@ -302,7 +302,11 @@ lib.addRoutes = function(addRoute, db, callback) {
       console.log(`clientStart-determiness-justX ${projectName} ${stack}`)
 
       determine[projectName] = function(req, res, match, result, callback) {
+        const clientId  = deref(req, 'serverassist.ids.clientId') || 'nobody';
+
         result.upstream = stack;
+
+        debugLog(req, `upstream: ${result.upstream} for ${clientId}, project: ${req.serverassist.ids.projectId}`);
         return callback(null, result);
       };
     };
@@ -310,17 +314,18 @@ lib.addRoutes = function(addRoute, db, callback) {
     /**
      *  Translates simple names (like 'prod') into fqdn for project.
      */
-    translate.simple = {};
-    translate.simple.v1 = function(req, res, match, result, callback) {
+    translate.simple = function(req, res, match, result, callback) {
       const requestedStack  = result.upstream || 'prod';
-      const query           = stackAlias(requestedStack);
+      const projectId       = deref(req, 'serverassist.ids.projectId');
+      const query           = sg.extend(stackAlias(requestedStack), {projectId});
+
       return stacksDb.find(query).toArray(function(err, stacks) {
         if (err)  { return callback(err); }
 
         if (!stacks || stacks.length === 0) {
           if (requestedStack !== 'prod') {
             result.upstream = 'prod';
-            return translate.simple.v1(req, res, match, result, callback);
+            return translate.simple(req, res, match, result, callback);
           }
           return callback('ENO_STACK');
 
@@ -335,10 +340,15 @@ lib.addRoutes = function(addRoute, db, callback) {
 
     translators.onramp = function(projectName) {
       console.log(`clientStart-translators-onramp ${projectName}`)
+
       setOn(translate, projectName, function(req, res, match, result, callback) {
-        return translate.simple.v1(req, res, match, result, function(err) {
+        return translate.simple(req, res, match, result, function(err) {
+          const clientId  = deref(req, 'serverassist.ids.clientId') || 'nobody';
+
           return onrampsDb.find({internalName: result.upstream}).limit(1).next(function(err, onramp) {
             if (err)    { console.error(err); return callback(err); }
+
+            debugLog(req, `translate: ${result.upstream} for ${clientId}, project: ${req.serverassist.ids.projectId} ->> ${onramp && onramp.externalName}`);
 
             if (onramp) {
               result.upstream = onramp.externalName;
@@ -355,7 +365,7 @@ lib.addRoutes = function(addRoute, db, callback) {
       translate[projectName][version] = function(req, res, match, result, callback) {
 
         // Get FQDN
-        return translate.simple.v1(req, res, match, result, function(err) {
+        return translate.simple(req, res, match, result, function(err) {
           if (err) { return callback(err); }
 
           // result.upstream should be fqdn of ours (color-stack.domainname.net)

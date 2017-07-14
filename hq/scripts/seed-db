@@ -125,21 +125,21 @@ fi
 if [[ $apigee_onramp ]]; then
   if [[ -z $workstation ]]; then
     # The main prod stack
-    ra_invoke ./models/onramp.js upsertOnramp --project-id="${project_id}" --version="${onramp_version}"   --internal="green-pub.${subdomain1}${domain_name}" --external="${pub_onramp_subdomain}api.hp.com/${project_id}/green/api/v${onramp_version}"
+    ra_invoke ./models/onramp.js upsertOnramp --project-id="${project_id}" --version="${onramp_version}"   --internal="green-pub.${subdomain1}${domain_name}" --external="http://${pub_onramp_subdomain}api.hp.com/${project_id}/green/api/v${onramp_version}"
 
     # Other stacks for colored deploys
-    ra_invoke ./models/onramp.js upsertOnramp --project-id="${project_id}" --version="${onramp_version}"    --internal="blue-pub.${subdomain1}${domain_name}"  --external="${pub_onramp_subdomain}api.hp.com/${project_id}/blue/api/v${onramp_version}"
-    ra_invoke ./models/onramp.js upsertOnramp --project-id="${project_id}" --version="${onramp_version}"    --internal="teal-pub.${subdomain1}${domain_name}"  --external="${pub_onramp_subdomain}api.hp.com/${project_id}/teal/api/v${onramp_version}"
-    ra_invoke ./models/onramp.js upsertOnramp --project-id="${project_id}" --version="${onramp_version}"  --internal="yellow-pub.${subdomain1}${domain_name}"  --external="${pub_onramp_subdomain}api.hp.com/${project_id}/yellow/api/v${onramp_version}"
+    ra_invoke ./models/onramp.js upsertOnramp --project-id="${project_id}" --version="${onramp_version}"    --internal="blue-pub.${subdomain1}${domain_name}" --external="http://${pub_onramp_subdomain}api.hp.com/${project_id}/blue/api/v${onramp_version}"
+    ra_invoke ./models/onramp.js upsertOnramp --project-id="${project_id}" --version="${onramp_version}"    --internal="teal-pub.${subdomain1}${domain_name}" --external="http://${pub_onramp_subdomain}api.hp.com/${project_id}/teal/api/v${onramp_version}"
+    ra_invoke ./models/onramp.js upsertOnramp --project-id="${project_id}" --version="${onramp_version}"  --internal="yellow-pub.${subdomain1}${domain_name}" --external="http://${pub_onramp_subdomain}api.hp.com/${project_id}/yellow/api/v${onramp_version}"
 
-    ra_invoke ./models/onramp.js upsertOnramp --project-id="${project_id}" --version="${onramp_version}"  --internal="green-test.${subdomain1}${domain_name}" --external="${test_onramp_subdomain}api.hp.com/${project_id}/green/api/v${onramp_version}"
-    ra_invoke ./models/onramp.js upsertOnramp --project-id="${project_id}" --version="${onramp_version}"   --internal="blue-test.${subdomain1}${domain_name}" --external="${test_onramp_subdomain}api.hp.com/${project_id}/blue/api/v${onramp_version}"
-    ra_invoke ./models/onramp.js upsertOnramp --project-id="${project_id}" --version="${onramp_version}"   --internal="teal-test.${subdomain1}${domain_name}" --external="${test_onramp_subdomain}api.hp.com/${project_id}/teal/api/v${onramp_version}"
-    ra_invoke ./models/onramp.js upsertOnramp --project-id="${project_id}" --version="${onramp_version}" --internal="yellow-test.${subdomain1}${domain_name}" --external="${test_onramp_subdomain}api.hp.com/${project_id}/yellow/api/v${onramp_version}"
+    ra_invoke ./models/onramp.js upsertOnramp --project-id="${project_id}" --version="${onramp_version}"  --internal="green-test.${subdomain1}${domain_name}" --external="http://${test_onramp_subdomain}api.hp.com/${project_id}/green/api/v${onramp_version}"
+    ra_invoke ./models/onramp.js upsertOnramp --project-id="${project_id}" --version="${onramp_version}"   --internal="blue-test.${subdomain1}${domain_name}" --external="http://${test_onramp_subdomain}api.hp.com/${project_id}/blue/api/v${onramp_version}"
+    ra_invoke ./models/onramp.js upsertOnramp --project-id="${project_id}" --version="${onramp_version}"   --internal="teal-test.${subdomain1}${domain_name}" --external="http://${test_onramp_subdomain}api.hp.com/${project_id}/teal/api/v${onramp_version}"
+    ra_invoke ./models/onramp.js upsertOnramp --project-id="${project_id}" --version="${onramp_version}" --internal="yellow-test.${subdomain1}${domain_name}" --external="http://${test_onramp_subdomain}api.hp.com/${project_id}/yellow/api/v${onramp_version}"
 
   else
     # The only stack
-    ra_invoke ./models/onramp.js upsertOnramp --project-id="${project_id}" --version="${onramp_version}" --internal="green-pub.${subdomain1}${domain_name}" --external="${subdomain1}${domain_name}"
+    ra_invoke ./models/onramp.js upsertOnramp --project-id="${project_id}" --version="${onramp_version}" --internal="green-pub.${subdomain1}${domain_name}" --external="http://${subdomain1}${domain_name}/${project_id}/api/v${onramp_version}"
 
   fi
 
@@ -148,7 +148,7 @@ else
     echo -n
   else
     # The only stack
-    ra_invoke ./models/onramp.js upsertOnramp --project-id="${project_id}" --version="${onramp_version}" --internal="green-pub.${subdomain1}${domain_name}" --external="${subdomain1}${domain_name}"
+    ra_invoke ./models/onramp.js upsertOnramp --project-id="${project_id}" --version="${onramp_version}" --internal="green-pub.${subdomain1}${domain_name}" --external="http://${subdomain1}${domain_name}/${project_id}/api/v${onramp_version}"
 
   fi
 
