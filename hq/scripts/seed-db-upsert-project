@@ -14,11 +14,13 @@ fi
 
 ra_invoke ./models/project.js upsertProject --project-id="${project_id}" --top-ns="${top_ns}" \
         --deploy-style="${workstation_deploy_style}" \
+        --deploy-args="${workstation_deploy_args}" \
         --uri-base="${uri_base}"
 
 if [[ -z $workstation ]]; then
   ra_invoke ./models/project.js upsertProject --project-id="${project_id}" --top-ns="${top_ns}" \
         --deploy-style="${deploy_style}" \
+        --deploy-args="${deploy_args}" \
         --aws-dev-key="${aws_dev_key}" --aws-prod-key="${aws_prod_key}" --aws-hq-key="${aws_hq_key}" \
         --bucket-namespace="${bucket_namespace}" \
         --cluster-class-b="${cluster_class_b}" --test-class-b="${test_class_b}" --prod-class-b="${prod_class_b}" \

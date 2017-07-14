@@ -29,6 +29,7 @@ if [[ -n $server_assist ]]; then
   test_domain_name="mobiledevassist.net"
   project_id="sa"
   top_ns="hp"
+  deploy_args="sa,sa_dbgtelemetry"
 
   onramp_version="1"
 
@@ -39,6 +40,7 @@ elif [[ -n $secure_print ]]; then
   test_domain_name="mobiledevprint.net"
   project_id="sap"
   top_ns="hp"
+  deploy_args="sap,gen2_app"
 
   apigee_onramp="1"
   pub_onramp_subdomain="secureprint."
@@ -52,6 +54,7 @@ elif [[ -n $mario ]]; then
   test_domain_name="mobiledevprint.net"
   project_id="mwp"
   top_ns="hp"
+  deploy_args="mwp,gen2_app"
 
   onramp_version="12"
 
@@ -72,7 +75,9 @@ if [[ -n $mobilewebassist_style ]]; then
           --domain-name="${domain_name}" \
           --test-domain-name="${test_domain_name}" \
           --deploy-style=justX \
+          --deploy-args="${deploy_args}" \
           --workstation-deploy-style=justX \
+          --workstation-deploy-args="${project_id},prod" \
           --aws-dev-key=mario_demo --aws-prod-key=mario_prod --aws-hq-key=HQ \
           --bucket-namespace=mobilewebprint \
           --cluster-class-b=13 --test-class-b=15 --prod-class-b=12 \
