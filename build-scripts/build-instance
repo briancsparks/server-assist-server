@@ -13,7 +13,7 @@
 [[ -n $SERVERASSIST_UTIL_HOSTNAME   ]] && util="$SERVERASSIST_UTIL_HOSTNAME"
 
 # The cheapest thing with high network
-instance_type="c4.xlarge"
+instance_type="t2.large"
 on_instance_build_dir="build-sa"
 
 eval "$(cli-shezargs $@)"
