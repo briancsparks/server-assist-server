@@ -3,7 +3,6 @@
 eval "$(cli-shezargs $@)"
 
 [[ -z $service ]] && service="$SERVERASSIST_SERVICE"
-[[ -z $stack   ]] && stack="$SERVERASSIST_STACK"
 
 if jsaws-build-block "install-repos" "Install repos"; then
 

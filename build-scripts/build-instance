@@ -27,19 +27,21 @@ die() {
   echo ""
   echo "  Options:"
   echo ""
-  echo "          --dry-run"
   echo "          --skip-ami"
+  echo "          --no-terminate"
+  echo "          --xvdf="
+  echo "          --base-name="
+  echo ""
+  echo "          --instance-type="
+  echo ""
   echo "          --ip="
   echo "          --key="
   echo "          --bucket-namespace="
-  echo "          --no-terminate"
   echo "          --build-number=20"
   echo "          --db=10.13.21.229"
   echo "          --util=10.13.21.4"
   echo "          --namespace="
-  echo "          --image-id="
-  echo "          --instance-type="
-  echo "          --xvdf="
+  echo "          --dry-run"
   echo ""
   exit 1
 }
@@ -104,8 +106,17 @@ fi
 [[ -z $base_name            ]] && base_name="xenial"
 
 amis="/tmp/amis-for-build-${namespace}-${build_number}.json"
-jsaws-ec2 getAmiIdsForBuild --namespace="${namespace}" --base-name="${base_name}" > "$amis"
+#jsaws-ec2 getAmiIdsForBuild --namespace="${namespace}" --base-name="${base_name}" > "$amis"
+jsaws-ec2 getAmiIdsForBuild --namespace="serverassist" --base-name="${base_name}" > "$amis"
 image_id="$(jsaws-get $amis '.base .imageId')"
+
+# Auto-determine instance-type
+if [[ -z $instance_type ]]; then
+  instance_type="c4.xlarge"
+  if [[ -n $skip_ami ]];        then instance_type="t2.large"
+  elif [[ -n $no_terminate ]];  then instance_type="t2.large"
+  fi
+fi
 
 [[ -n $instance_type        ]] || die "Missing --instance-type"
 [[ -n $build_number         ]] || die "Missing --build-number"
