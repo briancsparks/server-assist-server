@@ -20,7 +20,7 @@ const registerAsService       = serverassist.registerAsService;
 const mongoHost               = serverassist.mongoHost();
 const myIp                    = serverassist.myIp();
 
-const appName                 = 'sa_hq';
+const hqAppName               = 'sa_hq';
 const mount                   = '/sa/';
 const projectId               = 'sa';
 
@@ -31,7 +31,7 @@ const main = function() {
     const port                = ARGV.port || 8400;
     const myServiceLocation   = `http://${myIp}:${port}`;
 
-    const addRoute            = mkAddRoute(appName, router, myServiceLocation);
+    const addRoute            = mkAddRoute(hqAppName, router, myServiceLocation);
 
     return sg.__run([function(next) {
       // Do whatever for this specific server
@@ -65,17 +65,17 @@ const main = function() {
 
       // ---------- Listen on --port ----------
       server.listen(port, myIp, () => {
-        //console.log(`${appName} running HQ at http://${myIp}:${port}/`);
+        //console.log(`${hqAppName} running HQ at http://${myIp}:${port}/`);
 
-        //console.log(`Registering app ${appName}, mount: ${mount}, id: ${projectId}`);
-        registerAsServiceApp(appName, mount, {projectId, subdomain:'hq.'});
+        //console.log(`Registering app ${hqAppName}, mount: ${mount}, id: ${projectId}`);
+        registerAsServiceApp(hqAppName, mount, {projectId, subdomain:'hq.'});
         registerMyService();
 
         next();
 
         function registerMyService() {
           setTimeout(registerMyService, 750);
-          registerAsService(appName, myServiceLocation, myIp, 4000);
+          registerAsService(hqAppName, myServiceLocation, myIp, 4000);
         }
       });
 

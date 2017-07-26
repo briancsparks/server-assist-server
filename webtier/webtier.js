@@ -7,7 +7,7 @@ const http                    = require('http');
 const fs                      = require('fs');
 const path                    = require('path');
 const urlLib                  = require('url');
-const routes                  = require('./routes/routes');
+const routes                  = require('./routes/routes2');
 const MongoClient             = require('mongodb').MongoClient;
 const ra                      = require('run-anywhere');
 const libBuildNginxConf       = require('./ra-scripts/build-nginx-conf');
@@ -15,8 +15,10 @@ const libBuildNginxConf       = require('./ra-scripts/build-nginx-conf');
 const registerAsService       = serverassist.registerAsService;
 const registerAsServiceApp    = serverassist.registerAsServiceApp;
 const isLocalWorkstation      = serverassist.isLocalWorkstation;
+const generateNginxConf       = serverassist.server.generateNginxConf;
 
 var   ARGV                    = sg.ARGV();
+const setOn                   = sg.setOn;
 const mongoHost               = serverassist.mongoHost();
 const myIp                    = serverassist.myIp();
 const buildNginxConf          = ra.contextify(libBuildNginxConf.build);
@@ -121,6 +123,45 @@ const main = function() {
     }], function() {
 
       // ---------- Build the nginx.conf file ----------
+      var ngServers = sg.reduce(servers, [], (m, server_, name) => {
+        var server = sgkv('fqdn', name);
+        // TODO: Add attrs to server .http / .https / .requireClientCerts
+        m.push(server);
+        return m;
+      });
+
+      var ngConfig = {
+        webRootRoot   : path.join(process.env.HOME, 'www'),
+        certsDir      : '/'+path.join('etc', 'nginx', 'certs'),
+        openCertsDir  : path.join(process.env.HOME, 'tmp', 'nginx', 'certs'),
+        routesDir     : path.join(process.env.HOME, 'tmp', 'nginx', 'routes'),
+      };
+
+      setOn(ngConfig, 'noCerts', isLocalWorkstation());
+
+      generateNginxConf(ngConfig, ngServers, (err, conf) => {
+        var confFilename = '/tmp/server-assist-nginx0.conf';
+//        return fs.writeFile(confFilename, conf, function(err) {
+//          if (err) { return sg.die(err, `Failed save nginx.conf /tmp/ file`); }
+//
+//          const cmd   = path.join(__dirname, 'scripts', 'reload-nginx');
+//          const args  = [confFilename];
+//
+//          // Run a shell script that copies it to the right place and restats nginx
+//          return sg.exec(cmd, args, (err, exitCode, stdoutChunks, stderrChunks, signal) => {
+//            if (err)                        { console.error(`Failed to (re)start nginx`); }
+//            if (exitCode !== 0 || signal)   { console.log(`${cmd}: exit: ${exitCode}, signal: ${signal}`); }
+//
+//            console.log(stdoutChunks.join(''));
+//            console.error(stderrChunks.join(''));
+//
+//          });
+//        });
+        return fs.writeFile(confFilename, conf, function(err) {
+          if (err) { return sg.die(err, `Failed save nginx.conf /tmp/ file`); }
+          console.log(`Finished generating ${confFilename}`);
+        });
+      });
 
       // Generate the contents
       return buildNginxConf({fqdns: _.keys(servers)}, function(err, conf) {

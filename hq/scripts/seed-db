@@ -99,13 +99,10 @@ if [[ -n $mobilewebassist_style ]]; then
           --test-domain-name="${test_domain_name}" \
           --deploy-style="${deploy_style}" \
           --deploy-args="${deploy_args}" \
-          --workstation-deploy-style=justX \
-          --workstation-deploy-args="${project_id},prod" \
           --aws-dev-key=mario_demo --aws-prod-key=mario_prod --aws-hq-key=HQ \
           --bucket-namespace=mobilewebprint \
           --cluster-class-b=13 --test-class-b=15 --prod-class-b=12 \
-          --uri-base="${subdomain1}${domain_name}/${project_id}/" \
-          --uri-test-base="${subdomain1}${test_domain_name}/${project_id}/"
+          --uri-base="${subdomain1}${domain_name}/${project_id}/"
 
   # ---------- Insert the stacks ----------
 

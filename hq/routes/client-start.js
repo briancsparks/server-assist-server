@@ -25,9 +25,12 @@ var lib = {};
 lib.addRoutes = function(addRoute, db, callback) {
   var handlers = {}, determine = {}, translate = {}, determiness = {}, translators = {};
 
+  const clientsDb   = db.collection('clients');
   const stacksDb    = db.collection('stacks');
   const onrampsDb   = db.collection('onramps');
   const projectsDb  = db.collection('projects');
+  const partnersDb  = db.collection('partners');
+  const sessionsDb  = db.collection('sessions');
 
   const isSpecialClient = function(clientId) {
     if (clientId === '7B9qPWSIRh2EXElr4IQcLyrV3540klkqpjLpVtRuElSxyzWU5Tct0pNqA7cJDgnJ')  { return true; }
@@ -99,16 +102,23 @@ lib.addRoutes = function(addRoute, db, callback) {
         return sg._400(req, res, null, error);
       };
 
-      const url     = urlLib.parse(req.url, true);
-      const body    = req.bodyJson || req.body;
-      const query   = url.query;
+      var clientOps   = {};
+      var sessionOps  = {};
 
-      const { projectId_, partnerId, clientId, version } = req.serverassist.ids = getIds({body, query, match});
+      const url       = urlLib.parse(req.url, true);
+      const body      = req.bodyJson || req.body;
+      const query     = url.query;
 
+      // All of the parameters, irrespective of where they came from
+      var all         = sg.extend(body, query, params);
+      var now         = new Date();
+
+      // If the client is requesting a particular stack, it will be on this object
+      var rsvr        = all.rsvr;
+
+      const { projectId, partnerId, clientId, version, sessionId } = req.serverassist.ids = getIds({body, query, match});
       if (!version)                     { return onError('Must provide version'); }
-      if (!projectId_ && !partnerId)    { return onError('Must provide project-id or partner-id'); }
-
-      var projectId = projectId_;
+      if (!projectId && !partnerId)     { return onError('Must provide project-id or partner-id'); }
 
       var   result = {};
       setOn(result, 'upstream',             'prod');
@@ -117,7 +127,8 @@ lib.addRoutes = function(addRoute, db, callback) {
       return sg.__run([function(next) {
 
         // ----- Get the projectId -- it does not usually come along with requests
-        if (!partnerId)   { return reason(`Cannot get project; no partnerId`, next); }
+        //if (!partnerId)   { return reason(`Cannot get project; no partnerId`, next); }
+        if (!partnerId)   { return next(); }
 
         req.serverassist.partner = {};
         return models.findPartner({partnerId}, function(err, partner) {
@@ -141,6 +152,12 @@ lib.addRoutes = function(addRoute, db, callback) {
           return next();
         });
 
+      // ----- Did we get a project? -----
+      }, function(next) {
+        if (!req.serverassist.project)  { return onError(`No project`); }
+
+        return next();
+
       // ----- get client from DB -----
       }, function(next) {
         if (!clientId)  { return onError(`do not have clientId`); }
@@ -157,17 +174,87 @@ lib.addRoutes = function(addRoute, db, callback) {
       // ----- Build up the default response -----
       }, function(next) {
 
+        const origUpstream = result.upstream;
+
         const sa = req.serverassist || {};
         setOn(result, 'upstream',
                     (sa.client  && sa.client.upstream)  ||
                     (sa.partner && sa.partner.upstream) ||
                     (sa.project && sa.project.upstream));
 
+        // Did the system set the upstream? If not, see if the client wants to be sent somewhere
+        if (result.upstream === origUpstream || (result.upstream === 'prod' && sg.isnt(origUpstream))) {
+          if (rsvr) {
+            if (rsvr === 'hqdev')         { result.upstream = 'test'; }
+            else if (rsvr === 'hqqa')     { result.upstream = 'test'; }
+            else if (rsvr === 'hqstg')    { result.upstream = 'staging'; }
+          }
+        }
+
         setOn(result, 'preference',
             sg.extend((result     && result.preference) || {},
                       (sa.project && sa.project.preference) || {},
                       (sa.partner && sa.partner.preference) || {},
                       (sa.client  && sa.client.preference)  || {}));
+
+        return next();
+
+      }, function(next) {
+
+        // Remember the client record from the DB, for use adding the session
+        var clientRecord;
+
+        return sg.__run([function(next) {
+
+          // ----- client -----
+
+          if (!clientId) { return skip('No clientId to add/update in DB', next); }
+
+          setOn(clientOps, '$setOnInsert.ctime', now);
+          setOn(clientOps, '$set.mtime', now);
+          setOn(clientOps, '$set.clientId', clientId);
+          setOn(clientOps, '$inc.visits', 1);
+
+          return clientsDb.findOneAndUpdate({clientId}, clientOps, {upsert:true, returnOriginal:false}, function(err, r) {
+            if (err)              { return skip("Updating client "+clientId+" failed... continuing."); }
+            if (!r.ok)            { return skip("DB update failed for "+clientId+"... continuing."); }
+
+            clientRecord = r.value;
+            return next();
+          });
+
+          return next();
+
+        }, function(next) {
+
+          // ----- session -----
+
+          if (!sessionId) { return skip('No sessionId to add/update in DB', next); }
+
+          setOn(sessionOps, '$set.clientId', clientId);
+          setOn(sessionOps, '$setOnInsert.ctime', now);
+          setOn(sessionOps, '$set.mtime', now);
+          setOn(sessionOps, '$set.sessionId', sessionId);
+
+          if (clientRecord && _.isNumber(clientRecord.visits)) {
+            setOn(sessionOps, '$set.visitNum', clientRecord.visits);
+            if (clientRecord.visits === 1) {
+              setOn(sessionOps, '$set.firstVisit', true);
+            } else {
+              setOn(sessionOps, '$set.returnVisit', true);
+            }
+          }
+
+          return sessionsDb.updateOne({sessionId}, sessionOps, {upsert:true}, function(err, r) {
+            if (err)  { return skip("Inserting session "+sessionId+" failed... continuing."); }
+
+            return next();
+          });
+
+          return next();
+        }], function() {
+          return next();
+        });
 
         return next();
 

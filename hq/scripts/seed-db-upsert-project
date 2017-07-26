@@ -9,21 +9,18 @@ ra_invoke() {
 
 if [[ -n $workstation ]]; then
   uri_base="$(echo $uri_base | sed s/$domain_name/mobilewebassist.net/)"
-  uri_test_base="$(echo $uri_test_base | sed s/$test_domain_name/mobiledevassist.net/)"
+  uri_test_base="$()"
+  deploy_style="justX"
+  deploy_args="${project_id}.prod"
 fi
 
 ra_invoke ./models/project.js upsertProject --project-id="${project_id}" --top-ns="${top_ns}" \
-        --deploy-style="${workstation_deploy_style}" \
-        --deploy-args="${workstation_deploy_args}" \
-        --uri-base="${uri_base}"
-
-if [[ -z $workstation ]]; then
-  ra_invoke ./models/project.js upsertProject --project-id="${project_id}" --top-ns="${top_ns}" \
-        --deploy-style="${deploy_style}" \
-        --deploy-args="${deploy_args}" \
-        --aws-dev-key="${aws_dev_key}" --aws-prod-key="${aws_prod_key}" --aws-hq-key="${aws_hq_key}" \
-        --bucket-namespace="${bucket_namespace}" \
-        --cluster-class-b="${cluster_class_b}" --test-class-b="${test_class_b}" --prod-class-b="${prod_class_b}" \
-        --uri-test-base="${uri_test_base}"
-fi
+      --domain-name="${domain_name}" \
+      --test-domain-name="${test_domain_name}" \
+      --deploy-style="${deploy_style}" \
+      --deploy-args="${deploy_args}" \
+      --aws-dev-key="${aws_dev_key}" --aws-prod-key="${aws_prod_key}" --aws-hq-key="${aws_hq_key}" \
+      --bucket-namespace="${bucket_namespace}" \
+      --cluster-class-b="${cluster_class_b}" --test-class-b="${test_class_b}" --prod-class-b="${prod_class_b}" \
+      --uri-base="${uri_base}"
 
