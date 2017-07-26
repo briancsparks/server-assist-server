@@ -124,7 +124,7 @@ const main = function() {
 
       // ---------- Build the nginx.conf file ----------
       var ngServers = sg.reduce(servers, [], (m, server_, name) => {
-        var server = sgkv('fqdn', name);
+        var server = sg.kv('fqdn', name);
         // TODO: Add attrs to server .http / .https / .requireClientCerts
         m.push(server);
         return m;
