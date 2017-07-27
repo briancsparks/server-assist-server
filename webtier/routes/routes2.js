@@ -103,12 +103,24 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
 
           var apps = sg.reduce(apps_, {}, (m, app) => {
 
+            // The app has a list of stacks it can run on, as a string array. Turn it into a key-mirror.
             app.stacks = sg.reduce(app.stacks, {}, (m, stack) => { return sg.kv(m, stack, stack); });
-            if ((config.stack in app.stacks) || sg.numKeys(app.stacks) !== 0) {
-              // This app does not run on this stack.
+
+            // If the stacks claims to be an admin stack, then only special apps can run on it.
+            if (stacks[config.stack].isAdminStack) {
+
+              // The app might have special permissions to run on this stack
+              if (!(config.stack in app.stacks)) {
+                return m;
+              }
+            }
+
+            // Is app configured to run on this stack?
+            if (!(config.stack in app.stacks)) {
               return m;
             }
 
+            // Does the app claim to need a sub-domain?
             if (app.subdomain) {
               const project = projects[app.projectId];
               const pqdn    = (project || {}).pqdn    || 'mobilewebassist.net';
@@ -121,7 +133,9 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
               }
             }
 
+            // Remember the app's URL path as an array of strings
             app.urlPath = _.compact(app.mount.split('/'));
+
             return sg.kv(m, app.appId, app);
           });
 
