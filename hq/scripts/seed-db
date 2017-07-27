@@ -141,6 +141,21 @@ if [[ -n $mobilewebassist_style ]]; then
   fi
 fi
 
+# Now that the basics are setup
+if [[ -n $server_assist ]]; then
+
+  [[ -d $sara_scripts_dir ]] || die "Cannot find serverassist ra-scripts dir ${sara_scripts_dir}"
+  cd $sara_scripts_dir
+
+  # The stack as a whole, not just individual stack instantiations (like green)
+  ra_invoke ./models/stack.js upsertStack --project-id="${project_id}" --stack=test \
+      --http \
+      --https- \
+      --use-test-name \
+      --require-client-certs-
+
+fi
+
 if [[ $apigee_onramp ]]; then
   if [[ -z $workstation ]]; then
     # The main prod stack
