@@ -21,6 +21,7 @@ var   ARGV                    = sg.ARGV();
 const setOn                   = sg.setOn;
 const mongoHost               = serverassist.mongoHost();
 const myIp                    = serverassist.myIp();
+const myStack                 = serverassist.myStack();
 const buildNginxConf          = ra.contextify(libBuildNginxConf.build);
 
 var   dumpReq;
@@ -29,6 +30,7 @@ const appName                 = 'webtier_router';
 const port                    = 8401;
 
 var servers = {};
+var config  = {};
 
 const main = function() {
 
@@ -39,7 +41,8 @@ const main = function() {
     if (err)      { return sg.die(err, `Could not connect to DB ${mongoHost}`); }
 
     // The apps that we will be aware of
-    var apps = [];
+    config.apps   = [];
+    config.stack  = myStack;
 
     sg.__run([function(next) {
 
@@ -52,7 +55,7 @@ const main = function() {
       // If we are on a local workstation, handle root as being sent to :3000, the typical
       // Node.js port.  We add an app object (same format as whats in the apps collection
       // in the DB.), and then inform that there is a webtier_router service.
-      apps.push({appId:'web_root', mount:'/', projectId:'sa'});
+      config.apps.push({appId:'web_root', mount:'/', projectId:'sa'});
 
       // On workstation, add local.mwa.net as an endpoint. It is in DNS as 127.0.0.1
       //fqdns.unshift('local.mobilewebassist.net');
@@ -69,7 +72,7 @@ const main = function() {
     }, function(next) {
 
       // ----------- Load apps from the DB ----------
-      return routes.addRoutesToServers(db, servers, apps, (err) => {
+      return routes.addRoutesToServers(db, servers, config, (err) => {
         if (err) { console.error(`Failed to add servers`); }
 
         return next();
@@ -125,7 +128,12 @@ const main = function() {
       // ---------- Build the nginx.conf file ----------
       var ngServers = sg.reduce(servers, [], (m, server_, name) => {
         var server = sg.kv('fqdn', name);
-        // TODO: Add attrs to server .http / .https / .requireClientCerts
+
+        // Add attrs to server .useHttp / .useHttps / .requireClientCerts
+        _.each(server_.config, (value, key) => {
+          setOn(server, key, value);
+        });
+
         m.push(server);
         return m;
       });
@@ -139,35 +147,10 @@ const main = function() {
 
       setOn(ngConfig, 'noCerts', isLocalWorkstation());
 
+      const info = {config, ngConfig, ngServers};
+      serverassist.writeDebug(info, 'webtier-generate.json');
+
       generateNginxConf(ngConfig, ngServers, (err, conf) => {
-        var confFilename = '/tmp/server-assist-nginx0.conf';
-//        return fs.writeFile(confFilename, conf, function(err) {
-//          if (err) { return sg.die(err, `Failed save nginx.conf /tmp/ file`); }
-//
-//          const cmd   = path.join(__dirname, 'scripts', 'reload-nginx');
-//          const args  = [confFilename];
-//
-//          // Run a shell script that copies it to the right place and restats nginx
-//          return sg.exec(cmd, args, (err, exitCode, stdoutChunks, stderrChunks, signal) => {
-//            if (err)                        { console.error(`Failed to (re)start nginx`); }
-//            if (exitCode !== 0 || signal)   { console.log(`${cmd}: exit: ${exitCode}, signal: ${signal}`); }
-//
-//            console.log(stdoutChunks.join(''));
-//            console.error(stderrChunks.join(''));
-//
-//          });
-//        });
-        return fs.writeFile(confFilename, conf, function(err) {
-          if (err) { return sg.die(err, `Failed save nginx.conf /tmp/ file`); }
-          console.log(`Finished generating ${confFilename}`);
-        });
-      });
-
-      // Generate the contents
-      return buildNginxConf({fqdns: _.keys(servers)}, function(err, conf) {
-        if (err) { return sg.die(err, `Failed build nginx.conf file`); }
-
-        // Save the file to a tmp location
         var confFilename = '/tmp/server-assist-nginx.conf';
         return fs.writeFile(confFilename, conf, function(err) {
           if (err) { return sg.die(err, `Failed save nginx.conf /tmp/ file`); }

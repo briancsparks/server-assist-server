@@ -20,6 +20,8 @@ const verbose                 = sg.verbose;
 const lpad                    = sg.lpad;
 const pad                     = sg.pad;
 const normlz                  = sg.normlz;
+const setOnn                  = sg.setOnn;
+const argvExtract             = sg.argvExtract;
 var   router                  = Router();
 const ServiceList             = clusterLib.ServiceList;
 const isLocalWorkstation      = serverassist.isLocalWorkstation;
@@ -37,93 +39,156 @@ var lib = {};
 /**
  *  Add FQDN and paths to the `servers` object.
  */
-lib.addRoutesToServers = function(db, servers, apps, callback) {
+lib.addRoutesToServers = function(db, servers, config, callback) {
+  config.servers  = servers;
 
   var projectsDb  = db.collection('projects');
+  var stacksDb    = db.collection('stacks');
   var appsDb      = db.collection('apps');
   var appQuery    = {};
 
-  return projectsDb.find({}).toArray((err, projects_) => {
-    if (err) { return sg.die(err, callback, 'addRoutesToServers.each-project'); }
+  return stacksDb.find({stack:myStack, color:{$not:{$exists:true}}}).toArray((err, stacks_) => {
+    if (err)                    { return sg.die(err, callback, 'addRoutesToServers.each-stack'); }
 
-    var serverRecords = {};
-    var projects = sg.reduce(projects_, {}, (m, project) => {
-      const [fqdn, urlPath] = shiftBy(project.uriBase, '/');
-      serverRecords[fqdn] = fqdn;
+    // Update the config with stack-related info
+    var stacks = sg.reduce(stacks_, {}, (m, stack) => {
 
-      project.fqdn = fqdn;
-      project.urlPath    = _.compact(urlPath.split('/'));
-      return sg.kv(m, project.projectId, project);
+      sg.setOnn(config, ['stacks', stack.stack, stack.projectId, 'useHttp'],             stack.useHttp);
+      sg.setOnn(config, ['stacks', stack.stack, stack.projectId, 'useHttps'],            stack.useHttps);
+      sg.setOnn(config, ['stacks', stack.stack, stack.projectId, 'useTestName'],         stack.useTestName);
+      sg.setOnn(config, ['stacks', stack.stack, stack.projectId, 'requireClientCerts'],  stack.requireClientCerts);
+
+      return sg.kv(m, stack.stack, stack);
     });
 
-    return appsDb.find({}).toArray((err, apps_) => {
-      if (err) { return sg.die(err, callback, 'addRoutesToServers.each-app'); }
+    const confStack = config.confStack = config.stacks[config.stack] || {};
 
-      var apps = sg.reduce(apps_, {}, (m, app) => {
+    return projectsDb.find({}, {_id:0}).toArray((err, projects_) => {
+      if (err) { return sg.die(err, callback, 'addRoutesToServers.each-project'); }
 
-        if (app.subdomain) {
-          const project = projects[app.projectId];
-          var   fqdn    = (project || {}).fqdn;
-          if (fqdn) {
-            fqdn = _.compact(`${app.subdomain}.${fqdn}`.split('.')).join('.');
-            app.fqdn = fqdn;
-            serverRecords[fqdn] = fqdn;
-          }
-        }
+      // Make dictionary of projects indexed by project id
+      var projects = sg.reduce(projects_, {}, (m, project_) => {
+        const projectId       = project_.projectId;
+        const myConfStack     = confStack[projectId];
+        var   project2        = sg.deepCopy(project_);
+        var   project         = {};
 
-        app.urlPath = _.compact(app.mount.split('/'));
-        return sg.kv(m, app.appId, app);
+        const urlNormBase     = argvExtract(project2, 'uriBase');
+        const uriTestBase     = argvExtract(project2, 'uriTestBase');
+
+        const uriBase         = myConfStack.useTestName ? uriTestBase : uriNormBase;
+
+        const [pqdn, urlPath] = shiftBy(uriBase, '/');
+
+        setOnn(config, ['project', projectId, 'urlPath'],   urlPath);
+        setOnn(project,                       'urlPath',    _.compact(urlPath.split('/')));
+
+        setOnn(config, ['project', projectId, 'pqdn'],      pqdn);
+        setOnn(project,                       'pqdn',       pqdn);
+
+        _.each(project2, (value, key) => {
+          setOnn(config, ['project', projectId, key],       value);
+          setOnn(project,                       key,        value);
+        });
+
+        return sg.kv(m, projectId, project);
       });
 
-      _.each(apps, (app, appId) => {
+      return stacksDb.find({stack:myStack, color:{$exists:true}}).toArray((err, instances) => {
+        if (err) { return sg.die(err, callback, 'addRoutesToServers.each-instance'); }
 
-        const mkHandler = function(fqdn, route) {
-          const handler = function(req, res, params, splats) {
-            return serviceList.getOneService(app.appId, (err, location) => {
-              if (err)          { return sg._500(req, res, null, `Internal error `+err); }
-              if (!location)    { return sg._404(req, res, null, `Cannot find ${app.appId}`); }
+        return appsDb.find({}).toArray((err, apps_) => {
+          if (err) { return sg.die(err, callback, 'addRoutesToServers.each-app'); }
 
-              const rewritten         = req.url;
+          var apps = sg.reduce(apps_, {}, (m, app) => {
 
-              const internalEndpoint  = location.replace(/^(http|https):[/][/]/i, '');
-              const redir             = normlz(`/rpxi/${req.method}/${internalEndpoint}/${rewritten}`);
+            app.stacks = sg.reduce(app.stacks, {}, (m, stack) => { return sg.kv(m, stack, stack); });
+            if ((config.stack in app.stacks) || sg.numKeys(app.stacks) !== 0) {
+              // This app does not run on this stack.
+              return m;
+            }
 
-              verbose(2, `${fqdn}: ${appId} ->> ${redir}`);
+            if (app.subdomain) {
+              const project = projects[app.projectId];
+              const pqdn    = (project || {}).pqdn    || 'mobilewebassist.net';
+              const xqdn    = _.compact(`${app.subdomain}.${pqdn}`.split('.')).join('.');;
 
-              res.statusCode = 200;
-              res.setHeader('X-Accel-Redirect', redir);
-              res.end('');
+              if (xqdn === pqdn) {
+                app.pqdn = pqdn;
+              } else {
+                app.fqdn = xqdn;
+              }
+            }
+
+            app.urlPath = _.compact(app.mount.split('/'));
+            return sg.kv(m, app.appId, app);
+          });
+
+          _.each(apps, (app, appId) => {
+
+            const mkHandler = function(fqdn, route) {
+              const handler = function(req, res, params, splats) {
+                return serviceList.getOneService(app.appId, (err, location) => {
+                  if (err)          { return sg._500(req, res, null, `Internal error `+err); }
+                  if (!location)    { return sg._404(req, res, null, `Cannot find ${app.appId}`); }
+
+                  const rewritten         = req.url;
+
+                  const internalEndpoint  = location.replace(/^(http|https):[/][/]/i, '');
+                  const redir             = normlz(`/rpxi/${req.method}/${internalEndpoint}/${rewritten}`);
+
+                  verbose(2, `${fqdn}: ${appId} ->> ${redir}`);
+
+                  res.statusCode = 200;
+                  res.setHeader('X-Accel-Redirect', redir);
+                  res.end('');
+                });
+              };
+              return handler
+            };
+
+            // Apps may work with more than one project
+            var appProjectIds = [app.projectId];
+
+            const hostProject = projects[app.projectId];
+            _.each(appProjectIds, appProjectId => {
+              const project           = projects[appProjectId];
+              const projectConfStack  = confStack[project.projectId];
+              var   urlPath           = app.urlPath.slice();
+              var   fqdn;
+
+              if (app.fqdn) {
+                fqdn = app.fqdn;
+              } else if (project.deployStyle === 'greenBlueByService') {
+                fqdn = `${myColor}-${myStack}.${app.pqdn}`;
+              } else {
+                fqdn = (project || {}).pqdn    || 'apps.mobilewebassist.net';
+              }
+
+              if (!fqdn)  { console.error(`No project.fqdn for ${app.projectId}`); return; }
+
+              if (_.last(hostProject.urlPath) === urlPath[0]) {
+                urlPath.shift();
+              }
+              urlPath = project.urlPath.concat(urlPath);
+              const mount = urlPath.join('/');
+
+              // Add the fqdn/route
+              sg.setOn(servers, [fqdn, 'router'], Router());
+              sg.setOn(servers, [fqdn, 'config'], projectConfStack);
+
+              const route = normlz(`/${mount}/*`);
+              console.log(`Mounting ${lpad(appId, 20)} at ${pad(fqdn, 49)} ${route}`);
+
+              servers[fqdn].router.addRoute(route, mkHandler(fqdn, route));
+
             });
-          };
-          return handler
-        };
+          });
 
-        const project = projects[app.projectId];
-        const fqdn    = app.fqdn || (project || {}).fqdn;
-        var   urlPath = app.urlPath.slice();
+          return callback();
 
-        if (!fqdn)  { console.error(`No project.fqdn for ${app.projectId}`); return; }
-
-        if (_.last(project.urlPath) === urlPath[0]) {
-          urlPath.shift();
-        }
-        urlPath = project.urlPath.concat(urlPath);
-        const mount = urlPath.join('/');
-
-        // Add the fqdn/route
-        servers[fqdn]         = servers[fqdn]         || {};
-        servers[fqdn].router  = servers[fqdn].router  || Router();
-
-        var x = servers[fqdn].router;
-
-        const route = normlz(`/${mount}/*`);
-        console.log(`Mounting ${lpad(appId, 20)} at ${pad(fqdn, 49)} ${route}`);
-
-        servers[fqdn].router.addRoute(route, mkHandler(fqdn, route));
+        });
       });
-
-      return callback();
-
     });
   });
 

@@ -10,7 +10,7 @@ sudo cp $conf_file /etc/nginx/nginx.conf
 
 if ! sudo nginx -t; then
   # Put it back
-  cp "$tmp_dir/nginx.conf" /etc/nginx/nginx.conf
+  sudo cp "$tmp_dir/nginx.conf" /etc/nginx/nginx.conf
   exit 1
 fi
 
