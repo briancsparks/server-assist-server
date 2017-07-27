@@ -20,6 +20,7 @@ const verbose                 = sg.verbose;
 const lpad                    = sg.lpad;
 const pad                     = sg.pad;
 const normlz                  = sg.normlz;
+const deref                   = sg.deref;
 const setOnn                  = sg.setOnn;
 const argvExtract             = sg.argvExtract;
 var   router                  = Router();
@@ -61,22 +62,22 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
       return sg.kv(m, stack.stack, stack);
     });
 
-    const confStack = config.confStack = config.stacks[config.stack] || {};
+    const confStack = config.confStack = deref(config, ['stacks', config.stack]) || {};
 
     return projectsDb.find({}, {_id:0}).toArray((err, projects_) => {
       if (err) { return sg.die(err, callback, 'addRoutesToServers.each-project'); }
 
       // Make dictionary of projects indexed by project id
       var projects = sg.reduce(projects_, {}, (m, project_) => {
-        const projectId       = project_.projectId;
-        const myConfStack     = confStack[projectId];
+        const projectId       = project_.projectId    || '';
+        const myConfStack     = confStack[projectId]  || {};
         var   project2        = sg.deepCopy(project_);
         var   project         = {};
 
-        const urlNormBase     = argvExtract(project2, 'uriBase');
+        const uriNormBase     = argvExtract(project2, 'uriBase');
         const uriTestBase     = argvExtract(project2, 'uriTestBase');
 
-        const uriBase         = myConfStack.useTestName ? uriTestBase : uriNormBase;
+        const uriBase         = (myConfStack.useTestName === true) ? uriTestBase : uriNormBase;
 
         const [pqdn, urlPath] = shiftBy(uriBase, '/');
 
