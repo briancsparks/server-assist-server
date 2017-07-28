@@ -9,13 +9,14 @@ if jsaws-build-block "install-repos" "Install repos"; then
   if ! [[ -d ${HOME}/dev ]]; then
     mkdir -p ${HOME}/dev && cd $_
 
-    (git clone git@github.com:briancsparks/serverassist.git && cd serverassist && npm install --production)
+    (git clone git@github.com:briancsparks/serverassist.git && cd serverassist &&                          npm install --production)
+    (git clone git@github.com:briancsparks/js-cluster.git   && cd js-cluster   && git checkout no-mario && npm install --production)
 
     if [[ $service == web ]]; then
       (git clone git@github.com:briancsparks/server-assist-server.git)
-      (cd server-assist-server/webtier && npm install --production)
 
-      (cd server-assist-server/hq && npm install --production)
+      (cd server-assist-server/webtier  && npm install --production)
+      (cd server-assist-server/hq       && npm install --production)
     fi
 
     if [[ $service == netapp ]]; then
