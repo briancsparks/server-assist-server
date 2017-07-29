@@ -24,7 +24,7 @@ const myIp                    = serverassist.myIp();
 const myStack                 = serverassist.myStack();
 const buildNginxConf          = ra.contextify(libBuildNginxConf.build);
 
-var   dumpReq;
+var   dumpReq, reportOutput;
 
 const appName                 = 'webtier_router';
 const port                    = 8401;
@@ -125,19 +125,9 @@ const main = function() {
 
     }], function() {
 
-      // ---------- Build the nginx.conf file ----------
-      var ngServers = sg.reduce(servers, [], (m, server_, name) => {
-        var server = sg.kv('fqdn', name);
+      // ---------- Determine configuration for nginx.conf ----------
 
-        // Add attrs to server .useHttp / .useHttps / .requireClientCerts
-        _.each(server_.config, (value, key) => {
-          setOn(server, key, value);
-        });
-
-        m.push(server);
-        return m;
-      });
-
+      // Config settings that are quasi-global
       var ngConfig = {
         webRootRoot   : path.join(process.env.HOME, 'www'),
         certsDir      : '/'+path.join('etc', 'nginx', 'certs'),
@@ -147,27 +137,88 @@ const main = function() {
 
       setOn(ngConfig, 'noCerts', isLocalWorkstation());
 
-      const info = {config, ngConfig, ngServers};
+      // Config for each server/fqdn
+      var fileManifest = {};
+      var ngServers = sg.reduce(servers, [], (m, server_, name) => {
+        var server = sg.kv('fqdn', name);
+        const fqdn        = name;
+        const urlSafeName = fqdn.replace(/[^-a-z0-9_]/gi, '_');
+
+        // Add attrs to server .useHttp / .useHttps / .requireClientCerts
+        _.each(server_.config, (value, key) => {
+          setOn(server, key, value);
+        });
+
+        // If the server is to use https, where are the certs going?
+        if (server.useHttps) {
+          setOn(fileManifest, [urlSafeName, 'fqdn'],     fqdn);
+          setOn(fileManifest, [urlSafeName, 'cn'],       fqdn);
+          setOn(fileManifest, [urlSafeName, 'keyfile'],  path.join(ngConfig.openCertsDir, fqdn+'.key'));
+          setOn(fileManifest, [urlSafeName, 'certfile'], path.join(ngConfig.openCertsDir, fqdn+'.crt'));
+
+          setOn(server, ['fileManifest', urlSafeName], fileManifest[urlSafeName]);
+        }
+
+        // What about the client root cert?
+        if (server.requireClientCerts) {
+          const clientCert = `${server.projectName}_root_client_ca.crt`;
+          setOn(fileManifest, [`${server.projectName}_client`,    'certfile'], path.join(ngConfig.certsDir, clientCert));
+
+          setOn(server, ['fileManifest', `${server.projectName}_client`], clientCert);
+          setOn(server, 'clientCert', clientCert);
+        }
+
+        m.push(server);
+        return m;
+      });
+
+      const info = {config, servers, ngConfig, ngServers};
       serverassist.writeDebug(info, 'webtier-generate.json');
 
-      generateNginxConf(ngConfig, ngServers, (err, conf) => {
-        var confFilename = '/tmp/server-assist-nginx.conf';
-        return fs.writeFile(confFilename, conf, function(err) {
-          if (err) { return sg.die(err, `Failed save nginx.conf /tmp/ file`); }
+      //
+      // ---------- Build the nginx.conf file ----------
+      //
 
-          const cmd   = path.join(__dirname, 'scripts', 'reload-nginx');
-          const args  = [confFilename];
+      const confFilename = '/tmp/server-assist-nginx.conf';
+      const genSelfSignedCert = path.join(__dirname, 'scripts', 'gen-self-signed-cert');
+      return sg.__runll([function(next) {
+        return sg.__each(fileManifest, function(fileGroup, next) {
 
-          // Run a shell script that copies it to the right place and restats nginx
-          return sg.exec(cmd, args, (err, exitCode, stdoutChunks, stderrChunks, signal) => {
-            if (err)                        { console.error(`Failed to (re)start nginx`); }
-            if (exitCode !== 0 || signal)   { console.log(`${cmd}: exit: ${exitCode}, signal: ${signal}`); }
+          // We can only do self-signed certs here
+          if (!fileGroup.keyfile) { return next(); }
 
-            console.log(stdoutChunks.join(''));
-            console.error(stderrChunks.join(''));
+          const args = [fileGroup.keyfile, fileGroup.certfile, fileGroup.cn];
+          return sg.exec(genSelfSignedCert, args, function(error, exitCode, stdoutChunks, stderrChunks, signal) {
+            if (err)  { conole.error(error); return next(); }
 
+            reportOutput(`gen-self-signed(${fileGroup.cn}): ${exitCode} ${signal}`, error, exitCode, stdoutChunks, stderrChunks, signal);
+            return next();
+          });
+        }, next );
+      }, function(next) {
+
+        return generateNginxConf(ngConfig, ngServers, (err, conf) => {
+          return fs.writeFile(confFilename, conf, function(err) {
+            if (err) { return sg.die(err, `Failed save nginx.conf /tmp/ file`); }
+
+            return next();
           });
         });
+
+      }], function() {
+        const cmd   = path.join(__dirname, 'scripts', 'reload-nginx');
+        const args  = [confFilename];
+
+        // Run a shell script that copies it to the right place and restats nginx
+        return sg.exec(cmd, args, (err, exitCode, stdoutChunks, stderrChunks, signal) => {
+          if (err)                        { console.error(`Failed to (re)start nginx`); }
+          if (exitCode !== 0 || signal)   { console.log(`${cmd}: exit: ${exitCode}, signal: ${signal}`); }
+
+          console.log(stdoutChunks.join(''));
+          console.error(stderrChunks.join(''));
+
+        });
+
       });
     });
   });
@@ -181,6 +232,21 @@ dumpReq = function(req, res) {
     });
     console.log(sg.inspect(req.bodyJson));
     console.log('--------');
+  }
+};
+
+reportOutput = function(msg, error, exitCode, stdoutChunks, stderrChunks, signal) {
+  const stdoutLines = _.compact(stdoutChunks.join('').split('\n'));
+  console.log(`${msg}: ${stdoutLines[0]}`);
+
+  stdoutLines.shift();
+  if (stdoutLines.length > 0) {
+    console.log('gss:', stdoutLines);
+  }
+
+  const stderr = stderrChunks.join('');
+  if (stderr.length > 0) {
+    console.error('gss:', stderr);
   }
 };
 

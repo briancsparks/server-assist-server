@@ -1,0 +1,25 @@
+#!/bin/bash -e
+
+key_file="$1"
+cert_file="$2"
+cn="$3"
+
+if [[ $# > 3 ]]; then
+  ou="/OU=$4"
+fi
+
+# Skip if files already exist
+if [[ -f ${key_file} && -f ${cert_file} ]]; then
+  echo "Skipping generation of certs for ${cn}. They already exist."
+  exit 0
+fi
+
+mkdir -p "$(dirname ${key_file})"
+cd "$(dirname ${key_file})"
+
+pwd
+echo openssl req -nodes -x509 -newkey rsa:4096 -keyout "${key_file}" -out "${cert_file}" -days 356 -subj "/C=US/ST=California/L=San Diego/O=IT${ou}/CN=${cn}"
+openssl req -nodes -x509 -newkey rsa:4096 -keyout "${key_file}" -out "${cert_file}" -days 356 -subj "/C=US/ST=California/L=San Diego/O=IT${ou}/CN=${cn}"
+chmod 0400 "${key_file}"
+chmod 0400 "${cert_file}"
+
