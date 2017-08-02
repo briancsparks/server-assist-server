@@ -322,6 +322,9 @@ lib.addRoutes = function(addRoute, db, callback) {
             if (requestedServer === 'hqdev')         { result.upstream = 'test'; }
             else if (requestedServer === 'hqqa')     { result.upstream = 'test'; }
             else if (requestedServer === 'hqstg')    { result.upstream = 'staging'; }
+            else {
+              console.error(`Unknown rsvr=${requestedServer}; shoule be hqqa, hqdev, hqprod, etc.`);
+            }
 
             if (result.upstream !== origUpstream) {
               logChangeToUpstream(req, origUpstream, result.upstream, `rsvr-client-request`);
