@@ -170,6 +170,7 @@ const main = function() {
         if (server.useHttps) {
           setOn(fileManifest, [urlSafeName, 'fqdn'],     fqdn);
           setOn(fileManifest, [urlSafeName, 'cn'],       fqdn);
+          setOn(fileManifest, [urlSafeName, 'project'],  server.projectName);
           setOn(fileManifest, [urlSafeName, 'keyfile'],  path.join(ngConfig.openCertsDir, fqdn+'.key'));
           setOn(fileManifest, [urlSafeName, 'certfile'], path.join(ngConfig.openCertsDir, fqdn+'.crt'));
 
@@ -180,6 +181,7 @@ const main = function() {
         if (server.requireClientCerts) {
           const clientCert = `${server.projectName}_root_client_ca.crt`;
           setOn(fileManifest, [`${server.projectName}_client`,    'client'],   server.projectName);
+          setOn(fileManifest, [`${server.projectName}_client`,    'project'],  server.projectName);
           setOn(fileManifest, [`${server.projectName}_client`,    'certfile'], path.join(ngConfig.certsDir, clientCert));
 
           setOn(server, ['fileManifest', `${server.projectName}_client`], clientCert);
