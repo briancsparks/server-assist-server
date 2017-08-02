@@ -273,10 +273,14 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
 
             // Loop over all the projects
             _.each(appProjectIds, appProjectId => {
+              if (!projects[appProjectId]) {
+                console.error(`Skipping ${app.appId}/${appProjectId}`);
+                return;
+              }
 
               // Remember various things from the project.
               const project           = projects[appProjectId];
-              const projectConfStack  = confStack[project.projectId];
+              const projectConfStack  = sg.deepCopy(confStack[project.projectId]);
               var   urlPath           = app.urlPath.slice();
               var   xqdn;
               var   handler;
@@ -290,9 +294,35 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
               const route = normlz(`/${mount}/*`);
 
               //
+              //  Fixup https-ness for servers
+              //
+
+              const isAdmin = projectConfStack.isAdminStack || app.isAdminApp;
+
+              // useHttps: default: (admin === true; non-admin === app.useHttps), latch-to === true (stays true once true)
+              if (sg.isnt(projectConfStack.useHttps)) {
+                if (isAdmin)    { projectConfStack.useHttps = true; }
+                else            { projectConfStack.useHttps = false; }
+              }
+              projectConfStack.useHttps = projectConfStack.useHttps || app.useHttps;
+
+              // useHttp: default === true, latch-to === false (stays false)
+              if (sg.isnt(projectConfStack.useHttp)) {
+                if (isAdmin)    { projectConfStack.useHttp = false; }
+                else            { projectConfStack.useHttp = true; }
+              }
+              projectConfStack.useHttp = projectConfStack.useHttp && app.useHttp;
+
+              // requireClientCerts: default === false, latch-to === true (stays true)
+              if (sg.isnt(projectConfStack.requireClientCerts)) {
+                 projectConfStack.requireClientCerts = false;
+              }
+              projectConfStack.requireClientCerts = projectConfStack.requireClientCerts || app.requireClientCerts;
+
+              //
               //  For each app/project, there are potentially 2 fqdns:
               //    1. app-subdomain.project-domain
-              //    1. color-stack.project-domain
+              //    2. color-stack.project-domain
               //
 
               const pqdn = (project || {}).pqdn || 'mobilewebassist.net';     /* TODO: replace mwa with right default (could be local...) */
@@ -307,15 +337,17 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
 
               // Create fqdn by the projects method
               var fqdn;
-              if (project.deployStyle === 'greenBlueByService') {
-                fqdn = `${myColor}-${myStack}.${pqdn}`;
-              } else {
-                fqdn = `apps.${pqdn}`;
-              }
+              if (!app.isAdminApp) {
+                if (project.deployStyle === 'greenBlueByService') {
+                  fqdn = `${myColor}-${myStack}.${pqdn}`;
+                } else {
+                  fqdn = `apps.${pqdn}`;
+                }
 
-              if (fqdn) {
-                handler = mkHandler(appId, fqdn, route, projectConfStack);
-                servers[fqdn].router.addRoute(route, handler);
+                if (fqdn) {
+                  handler = mkHandler(appId, fqdn, route, projectConfStack);
+                  servers[fqdn].router.addRoute(route, handler);
+                }
               }
 
             });
