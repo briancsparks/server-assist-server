@@ -6,6 +6,7 @@ eval "$(cli-shezargs $@)"
 cpit () {
   tmp_dir="$1"
   the_pathname="$2"
+  project="$3"
   the_filename="$(basename $the_pathname)"
   the_dir="$(dirname $the_pathname)"
 
@@ -16,7 +17,7 @@ cpit () {
   fi
 
   mkdir -p "${tmp_dir}/${the_dir}"
-  if pull-secret --project=mobilewebassist $the_filename; then
+  if pull-secret --project="$project" $the_filename; then
     mv ~/stmp/$the_filename "${tmp_dir}/${the_dir}"
   fi
 }
@@ -27,13 +28,13 @@ cd "$(fd ~/dev/ js-cluster$)"
 ./build-scripts/run-instance --as-pid="$as_pid" --project-id="sa" --namespace="serverassist" "$orig_args"
 ip="$(cat /tmp/run-instance-from-ami-${service}-${as_pid}.json | underscore select '.InstanceId ~ .PrivateIpAddress' --outfmt=text)"
 
-echo "============================================================================================"
-echo "============================================================================================"
-echo "============================================================================================"
-echo "============================================================================================"
-echo $ip
-echo "============================================================================================"
-echo "============================================================================================"
+#echo "============================================================================================"
+#echo "============================================================================================"
+#echo "============================================================================================"
+#echo "============================================================================================"
+#echo $ip
+#echo "============================================================================================"
+#echo "============================================================================================"
 
 [[ -z $ip ]] && die "no ip"
 
@@ -48,7 +49,7 @@ manifest_file="/tmp/sas-run-instance-file-manifest-$$.json"
 sleep 5
 
 if [[ $service == web ]]; then
-  for ((i=0; i<20;i++)); do
+  for ((i=0; i<40;i++)); do
     echo scpix "$ip:sas-file-manifest.json" "$manifest_file"
     if scpix "$ip:sas-file-manifest.json" "$manifest_file"; then
       break
@@ -64,19 +65,23 @@ if scpix "$ip:sas-file-manifest.json" "$manifest_file"; then
     count="$(cat $manifest_file | jq '[.[] | select(.cn)] | length')"
     for n in $(seq 0 $((count-1))); do
 
+      project="$(cat $manifest_file | jq --raw-output "[.[] | select(.cn)] | .[$n] | .project")"
+
       keyfile="$(cat $manifest_file | jq --raw-output "[.[] | select(.cn)] | .[$n] | .keyfile")"
-      cpit $manifest_dir $keyfile
+      cpit $manifest_dir $keyfile $project
 
       certfile="$(cat $manifest_file | jq --raw-output "[.[] | select(.cn)] | .[$n] | .certfile")"
-      cpit $manifest_dir $certfile
+      cpit $manifest_dir $certfile $project
     done
 
     # ----- Get the client root certs
     count="$(cat $manifest_file | jq '[.[] | select(.client)] | length')"
     for n in $(seq 0 $((count-1))); do
 
+      project="$(cat $manifest_file | jq --raw-output "[.[] | select(.client)] | .[$n] | .project")"
+
       certfile="$(cat $manifest_file | jq --raw-output "[.[] | select(.client)] | .[$n] | .certfile")"
-      cpit $manifest_dir $certfile
+      cpit $manifest_dir $certfile $project
     done
 
     # Copy everything to the server
@@ -89,7 +94,7 @@ if scpix "$ip:sas-file-manifest.json" "$manifest_file"; then
 
     # Move to the right place on the server
     sshix $ip 'cd zz_packages/build-files/scotty && find ./ -type f | while read f; do echo $f; mv -f $f /$f; chmod 0400 /$f; done'
-    sshix $ip 'cd zz_packages/build-files/root   && find ./ -type f | while read f; do echo $f; sudo mkdir $(dirname /$f); sudo mv -f $f /$f; sudo chmod 0400 /$f; sudo chown root:root /$f; done'
+    sshix $ip 'cd zz_packages/build-files/root   && find ./ -type f | while read f; do echo $f; sudo mkdir -p $(dirname /$f); sudo mv -f $f /$f; sudo chmod 0400 /$f; sudo chown root:root /$f; done'
 
     sshix $ip 'pm2 restart webtier'
 
