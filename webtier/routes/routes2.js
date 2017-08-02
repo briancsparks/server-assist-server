@@ -177,6 +177,11 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
 
           var apps = sg.reduce(apps_, {}, (m, app) => {
 
+            // Fixup props
+            if (sg.isnt(app.useHttp))               { app.useHttp             = !app.isAdminApp; }
+            if (sg.isnt(app.useHttps))              { app.useHttps            = app.isAdminApp; }
+            if (sg.isnt(app.requireClientCerts))    { app.requireClientCerts  = false; }
+
             // The app has a list of stacks it can run on, as a string array. Turn it into a key-mirror.
             app.runsOn = sg.reduce(app.runsOn, {}, (m, stack) => { return sg.kv(m, stack, stack); });
 
