@@ -48,6 +48,11 @@ To run an AMI made above:
     (cd ~/dev/js-cluster/ && ./build-scripts/run-instance --project-id=sa --instance-type=t2.large --namespace=serverassist --service=web --key=mario_prod --stack=pub --color=blue)
 ```
 
+## Or, use sa-server
+
+```
+    (cd ~/dev/server-assist-server/ && ./build-scripts/run-instance --instance-type=t2.large --service=web --stack=test --color=blue)
+```
 
 ## For Mario (non-sa):
 
