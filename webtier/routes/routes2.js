@@ -39,6 +39,11 @@ var lib = {};
 
 /**
  *  Add FQDN and paths to the `servers` object.
+ *
+ *  @param {MongoClient} db       - The DB.
+ *  @param {Object}      servers  - A dict of mappings between FQDN and a Router() object.
+ *                                  Also has config for fqdn.
+ *  @param {Object}      config   - The overall configuration.
  */
 lib.addRoutesToServers = function(db, servers, config, callback) {
   config.servers  = servers;
@@ -48,6 +53,14 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
   var appsDb      = db.collection('apps');
   var appQuery    = {};
 
+  //
+  //  Get all of the projects from the DB.
+  //
+  //  - Make a dict `rawProjects` that indexes projectId to project.
+  //  - Later, we make a dict `projects` that indexes projectId to fixed-up versions
+  //    of the projects.
+  //
+
   return projectsDb.find({}, {_id:0}).toArray((err, projects_) => {
     if (err) { return sg.die(err, callback, 'addRoutesToServers.each-project'); }
 
@@ -55,6 +68,17 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
     var rawProjects = sg.reduce(projects_, {}, (m, project_) => {
       return sg.kv(m, project_.projectId, sg.deepCopy(project_));
     });
+
+    //
+    //  Get all the stacks from the DB; exclude the instance objects that are also in the
+    //  stacks DB collection..
+    //
+    //  - Make a dict `stacksByProjectId` that indexes the stacks by projectId.
+    //  - Add any project that is named by a stack, that is not present in the projects DB.
+    //    Copy the `sa` stack.
+    //  - Make a dict `stacks` that indexes by stack name (`stack.stack`) to stack.
+    //  - Determine the stack that we are configuring for as `confStack`.
+    //
 
     return stacksDb.find({stack:myStack, color:{$not:{$exists:true}}}).toArray((err, stacks_) => {
       if (err)                    { return sg.die(err, callback, 'addRoutesToServers.each-stack'); }
@@ -94,42 +118,61 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
 
       const confStack = config.confStack = deref(config, ['stacks', config.stack]) || {};
 
-      // Make dictionary of projects indexed by project id
+      //
+      //  Make dictionary of projects indexed by projectId (`projects`)
+      //
+      //  - Fix up all `project` objects.
+      //
+
       var projects = sg.reduce(projects_, {}, (m, project_) => {
         const projectId       = project_.projectId    || '';
         const myConfStack     = confStack[projectId]  || {};
         var   project2        = sg.deepCopy(project_);
         var   project         = {};
 
+        // Should we use uriBase or uriTestBase?
         const uriNormBase     = argvExtract(project2, 'uriBase');
         const uriTestBase     = argvExtract(project2, 'uriTestBase');
 
         const uriBase         = (myConfStack.useTestName === true) ? uriTestBase : uriNormBase;
 
+        // Determine the partial domain name (pqdn) and base-path
         const [pqdn, urlPath] = shiftBy(uriBase, '/');
 
-        setOnn(config, ['project', projectId, 'urlPath'],   urlPath);
-        setOnn(project,                       'urlPath',    _.compact(urlPath.split('/')));
+        setOnn(config,    ['project', projectId, 'pqdn'],      pqdn);
+        setOnn(project,                          'pqdn',       pqdn);
 
-        setOnn(config, ['project', projectId, 'pqdn'],      pqdn);
-        setOnn(project,                       'pqdn',       pqdn);
+        setOnn(config,    ['project', projectId, 'urlPath'],   urlPath);
+        setOnn(project,                          'urlPath',    _.compact(urlPath.split('/')));
 
+        // Copy the rest of the attributes onto both the config object and the project object
         _.each(project2, (value, key) => {
-          setOnn(config, ['project', projectId, key],       value);
-          setOnn(project,                       key,        value);
+          setOnn(config,  ['project', projectId, key],         value);
+          setOnn(project,                        key,          value);
         });
 
+        // Return for reduce()
         return sg.kv(m, projectId, project);
       });
 
+      //
+      //  Find all the instance objects from the DB.
+      //
+
       return stacksDb.find({stack:myStack, color:{$exists:true}}).toArray((err, instances) => {
         if (err) { return sg.die(err, callback, 'addRoutesToServers.each-instance'); }
+
+        //
+        //  Find all the app objects from the DB.
+        //
 
         return appsDb.find({}).toArray((err, apps_) => {
           if (err) { return sg.die(err, callback, 'addRoutesToServers.each-app'); }
 
           //
-          //  Fixup the app object, and filter out any that are not for this stack
+          //  Make a mapping `apps` from appId to app object.
+          //
+          //  - Fixup each app object, and filter out any that are not for this stack
           //
 
           var apps = sg.reduce(apps_, {}, (m, app) => {
@@ -137,7 +180,11 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
             // The app has a list of stacks it can run on, as a string array. Turn it into a key-mirror.
             app.runsOn = sg.reduce(app.runsOn, {}, (m, stack) => { return sg.kv(m, stack, stack); });
 
+            // If the app is an admin app, that means it runs on the cluster stack.
             if (app.isAdminApp)   { app.runsOn.cluster        = 'cluster'; }
+
+            // If the app is marked to run on `all`, that means it runs on this stack (the one we are
+            // currently configuring.)
             if (app.runsOn.all)   { app.runsOn[config.stack]  = config.stack; }
 
             // Is app configured to run on this stack?
@@ -156,8 +203,18 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
             return sg.kv(m, app.appId, app);
           });
 
+          //
+          //  Loop over all the apps.
+          //
+          //  This is where the real work of making a router, and setting the configuration
+          //  of the stack and its FQDNs.
+          //
+
           _.each(apps, (app, appId) => {
 
+            /**
+             *  Makes a function that handles requests.
+             */
             const mkHandler = function(appId, fqdn, route, fqdnConf) {
 
               // Add the fqdn/route
@@ -166,6 +223,14 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
 
               console.log(`Mounting ${lpad(appId, 20)} at ${pad(fqdn, 49)} ${route}`);
 
+              /**
+               *  Handles requests and sends them to the right internal end-point
+               *  via `X-Accel-Redirect`.
+               *
+               *  Uses js-cluster's services to lookup a running instance of the appropriate
+               *  service; then uses `X-Accel-Redirect` to send Nginx there to retrieve the
+               *  real response.
+               */
               const handler = function(req, res, params, splats) {
                 return serviceList.getOneService(app.appId, (err, location) => {
                   if (err)          { return sg._500(req, res, null, `Internal error `+err); }
@@ -191,19 +256,25 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
             //
             //  Basically, it is up to the apps to build the servers object. We are currently
             //  looping over all the apps that remain for this stack. Shortly below, we are
-            //  looping over all the projects that the app wants to loop over. Above are two
-            //  functions (mkHandler, and addFqdn). Those cause servers to be made and handled.
+            //  looping over all the projects that the app wants to loop over. Above is the
+            //  function (mkHandler), which causes handlers to be made.
             //
 
-            // Apps may work with more than one project
+            // Start with the app's own (natural) project.
             var appProjectIds = sg.kv(app.projectId, app.projectId);
 
+            // Add all known projects if the mount-point starts with `'*'`
             if (app.mount && (app.mount[0] === '*')) {
               appProjectIds = sg.extend(appProjectIds, keyMirror(_.keys(projects)));
             }
 
+            // Remember the app's own (natural) project.
             const hostProject = projects[app.projectId];
+
+            // Loop over all the projects
             _.each(appProjectIds, appProjectId => {
+
+              // Remember various things from the project.
               const project           = projects[appProjectId];
               const projectConfStack  = confStack[project.projectId];
               var   urlPath           = app.urlPath.slice();
@@ -220,11 +291,11 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
 
               //
               //  For each app/project, there are potentially 2 fqdns:
+              //    1. app-subdomain.project-domain
               //    1. color-stack.project-domain
-              //    2. app-subdomain.project-domain
               //
 
-              const pqdn = (project || {}).pqdn || 'mobilewebassist.net'
+              const pqdn = (project || {}).pqdn || 'mobilewebassist.net';     /* TODO: replace mwa with right default (could be local...) */
 
               // Does the app claim to need a sub-domain?
               if (app.subdomain) {
@@ -234,7 +305,8 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
                 }
               }
 
-              var fqdn = '';
+              // Create fqdn by the projects method
+              var fqdn;
               if (project.deployStyle === 'greenBlueByService') {
                 fqdn = `${myColor}-${myStack}.${pqdn}`;
               } else {
