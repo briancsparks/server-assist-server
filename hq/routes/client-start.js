@@ -42,7 +42,7 @@ lib.addRoutes = function(addRoute, db, callback) {
     if (!clientId)                                                                        { return false; }
     if (clientId === '7B9qPWSIRh2EXElr4IQcLyrV3540klkqpjLpVtRuElSxyzWU5Tct0pNqA7cJDgnJ')  { return true; }
     if (clientId && (clientId.length > 0 && clientId.length <= 8))                        { return true; }
-    if (clientId.length < 24 && clientId.startsWith('marioyoshipeach'))                   { return true; }
+    if (clientId.length < 53 && clientId.startsWith('marioyoshipeach'))                   { return true; }
 
     return false;
   };
@@ -501,7 +501,7 @@ lib.addRoutes = function(addRoute, db, callback) {
 
               appPath = [...projectPath, ...appPath].join('/');
 
-              const appName = _.rest(app.appId.split('_')).join('_');
+              const appName = app.appId;
 
               setOn(result, ['upstreams', appName], protocol+'://'+normlz(`${upstream}/${appPath}`));
             });
