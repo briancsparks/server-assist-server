@@ -15,6 +15,7 @@ if jsaws-build-block "install-repos" "Install repos"; then
     if [[ $service == web ]]; then
       (git clone git@github.com:briancsparks/server-assist-server.git)
 
+      (cd server-assist-server          && npm install --production)
       (cd server-assist-server/webtier  && npm install --production)
       (cd server-assist-server/hq       && npm install --production)
     fi
