@@ -2,104 +2,73 @@
 
 eval "$(cli-shezargs $@)"
 
-# Copyit
-cpit () {
-  tmp_dir="$1"
-  the_pathname="$2"
-  project="$3"
+#
+# Pulls a credential from S3, decrypts it and puts it on a remote host during
+# a run-from-ami
+#
+cpit() {
+  the_pathname="$1"
+  project="$2"
+  ip="$3"
+
   the_filename="$(basename $the_pathname)"
   the_dir="$(dirname $the_pathname)"
 
-  if [[ $the_dir =~ scotty ]]; then
-    the_dir="scotty${the_dir}"
-  else
-    the_dir="root${the_dir}"
-  fi
-
-  mkdir -p "${tmp_dir}/${the_dir}"
+  # The only tricky thing is to put it into scotty's user area, or into a root dir
   if pull-secret --project="$project" $the_filename; then
-    mv ~/stmp/$the_filename "${tmp_dir}/${the_dir}"
+    scpix ~/stmp/$the_filename "$ip:~/" && rm ~/stmp/$the_filename
+
+    if [[ $the_dir =~ scotty ]]; then
+      sshix $ip "mkdir -p $the_dir && cd $the_dir && mv $HOME/$the_filename ./ && chmod 0400 $the_filename"
+    else
+      sshix $ip "sudo mkdir -p $the_dir && cd $the_dir && sudo mv $HOME/$the_filename ./ && sudo chmod 0400 $the_filename && sudo chown root:root $the_filename"
+    fi
+
   fi
 }
 
+# Force js-cluster/run-instance to use my PID, so I can know what IP the instance was launched as
 as_pid="$$"
 
+# Get the big configuration JSON object
+configuration="/tmp/configuration-$$.json"
+ra invoke $scripts_dir/../ra-scripts/cluster-config.js configuration > $configuration
+
+# ---------- Run via js-cluster/run-instance ----------
 cd "$(fd ~/dev/ js-cluster$)"
-./build-scripts/run-instance --as-pid="$as_pid" --project-id="sa" --namespace="serverassist" "$orig_args"
+./build-scripts/run-instance --skip-start --as-pid="$as_pid" --project-id="sa" --namespace="serverassist" "$orig_args"
+
+# Get the IP, die if we cannot
 ip="$(cat /tmp/run-instance-from-ami-${service}-${as_pid}.json | underscore select '.InstanceId ~ .PrivateIpAddress' --outfmt=text)"
 
-#echo "============================================================================================"
-#echo "============================================================================================"
-#echo "============================================================================================"
-#echo "============================================================================================"
-#echo $ip
-#echo "============================================================================================"
-#echo "============================================================================================"
-
 [[ -z $ip ]] && die "no ip"
-
 cd "${start_dir}"
 
-# pull the file manifest back from the server
-manifest_dir="/tmp/sas-run-instance-$$-files"
-mkdir -p $manifest_dir
+# Now, find all the certs and keys needed by the new instance
 
-manifest_file="/tmp/sas-run-instance-file-manifest-$$.json"
+# Only pertains to web instances
+if [[ $stack == web ]]; then
+  for fqdn in $(cat $configuration | jq -r ".result | .subStacks | .[\"$color-$stack\"] | .fqdns | keys | .[]"); do
+    echo $fqdn
 
-sleep 5
+    # Un-comment this line to see what the JSON looks like
+    #cat $configuration | jq -r ".result | .subStacks | .[\"$color-$stack\"] | .fqdns | .[\"$fqdn\"]"
 
-if [[ $service == web ]]; then
-  for ((i=0; i<40;i++)); do
-    echo scpix "$ip:sas-file-manifest.json" "$manifest_file"
-    if scpix "$ip:sas-file-manifest.json" "$manifest_file"; then
-      break
-    fi
-    sleep 3
+    project="$(cat $configuration | jq -r ".result | .subStacks | .[\"$color-$stack\"] | .fqdns | .[\"$fqdn\"] | .projectName")"
+
+    file="$(cat $configuration | jq -r ".result | .subStacks | .[\"$color-$stack\"] | .fqdns | .[\"$fqdn\"] | .certfile")"
+    [[ -n $file && $file != null ]] && cpit $(echo $file | jq -r '.[]') $project $ip
+
+    file="$(cat $configuration | jq -r ".result | .subStacks | .[\"$color-$stack\"] | .fqdns | .[\"$fqdn\"] | .keyfile")"
+    [[ -n $file && $file != null ]] && cpit $(echo $file | jq -r '.[]') $project $ip
+
+    file="$(cat $configuration | jq -r ".result | .subStacks | .[\"$color-$stack\"] | .fqdns | .[\"$fqdn\"] | .clientCert")"
+    [[ -n $file && $file != null ]] && cpit $(echo $file | jq -r '.[]') $project $ip
   done
 fi
 
-if scpix "$ip:sas-file-manifest.json" "$manifest_file"; then
-  if [[ -f $manifest_file ]]; then
-
-    # ----- Get the fqdn certs
-    count="$(cat $manifest_file | jq '[.[] | select(.cn)] | length')"
-    for n in $(seq 0 $((count-1))); do
-
-      project="$(cat $manifest_file | jq --raw-output "[.[] | select(.cn)] | .[$n] | .project")"
-
-      keyfile="$(cat $manifest_file | jq --raw-output "[.[] | select(.cn)] | .[$n] | .keyfile")"
-      cpit $manifest_dir $keyfile $project
-
-      certfile="$(cat $manifest_file | jq --raw-output "[.[] | select(.cn)] | .[$n] | .certfile")"
-      cpit $manifest_dir $certfile $project
-    done
-
-    # ----- Get the client root certs
-    count="$(cat $manifest_file | jq '[.[] | select(.client)] | length')"
-    for n in $(seq 0 $((count-1))); do
-
-      project="$(cat $manifest_file | jq --raw-output "[.[] | select(.client)] | .[$n] | .project")"
-
-      certfile="$(cat $manifest_file | jq --raw-output "[.[] | select(.client)] | .[$n] | .certfile")"
-      cpit $manifest_dir $certfile $project
-    done
-
-    # Copy everything to the server
-    sshix $ip 'mkdir -p zz_packages/build-files'
-    scpix -r $manifest_dir/* "$ip:~/zz_packages/build-files/"
-
-    # remove local copies
-    rm -f $manifest_file
-    test -d $manifest_dir && echo rm -rf $manifest_dir
-
-    # Move to the right place on the server
-    sshix $ip 'cd zz_packages/build-files/scotty && find ./ -type f | while read f; do echo $f; mv -f $f /$f; chmod 0400 /$f; done'
-    sshix $ip 'cd zz_packages/build-files/root   && find ./ -type f | while read f; do echo $f; sudo mkdir -p $(dirname /$f); sudo mv -f $f /$f; sudo chmod 0400 /$f; sudo chown root:root /$f; done'
-
-    sshix $ip 'pm2 restart webtier'
-
-  fi
-fi
-
+# Finish the startup process
+ra invoke `fn ~/dev/ ssh\.js$` sshRun --ip=${ip} --command="./build-scripts/on-instance/b01-start-from-snapshot"  --message="${service}-sfss"
+ra invoke `fn ~/dev/ ssh\.js$` sshRun --ip=${ip} --command="./build-scripts/on-instance/b02-start-services"       --message="${service}-start"
 
 
