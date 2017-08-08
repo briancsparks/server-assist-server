@@ -350,8 +350,7 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
                 }
 
                 if (fqdn) {
-                  handler = mkHandler(appId, fqdn, route, projectConfStack);
-                  servers[fqdn].router.addRoute(route, handler);
+                  handler = mkHandler(appId, fqdn, route, projectConfStack); servers[fqdn].router.addRoute(route, handler);
                 }
               }
 

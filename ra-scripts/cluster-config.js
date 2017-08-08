@@ -19,6 +19,8 @@ const myColor                 = process.env.SERVERASSIST_COLOR          || 'gree
 const myStack                 = process.env.SERVERASSIST_STACK          || 'test';
 
 const serverCertsDir          = path.join(process.env.HOME, 'tmp', 'nginx', 'certs');
+const routesDir               = path.join(process.env.HOME, 'tmp', 'nginx', 'routes');
+const webRootRootDir          = path.join(process.env.HOME, 'www');
 const clientCertsDir          = path.join('/etc', 'nginx', 'certs');
 const logsDir                 = path.join('/var', 'log', 'nginx');
 
@@ -144,7 +146,6 @@ lib.configuration = function(argv_, context, callback) {
 
       return sg.__run([function(next) {
         //
-        //  TODO:
         //  Loop over the app/project combos, and build:
         //
         //    * fqdns/cert manifests/etc
@@ -165,7 +166,7 @@ lib.configuration = function(argv_, context, callback) {
 
             // Is this app/project pair compatible?
             if (app.projectId !== projectId && app.mount[0] !== '*') {
-              console.error(`${appId} is not compaatible with project: ${projectId}, skipping`);
+              console.log(`[[${appId} is not compaatible with project: ${projectId}, skipping]]`);
               return;
             }
 
@@ -174,9 +175,9 @@ lib.configuration = function(argv_, context, callback) {
               var useHttp, useHttps, requireClientCerts;
 
               if (app.isAdminApp) {
-                if (!stack.isAdminStack)  { console.error(`${appId} is not compaatible with stack: ${stack.stack} for ${projectId}, skipping`); return; }
+                if (!stack.isAdminStack)  { console.log(`[[${appId} is not compaatible with stack: ${stack.stack} for ${projectId}, skipping]]`); return; }
               } else {
-                if (stack.isAdminStack)   { console.error(`${appId} is not compaatible with stack: ${stack.stack} for ${projectId}, skipping`); return; }
+                if (stack.isAdminStack)   { console.log(`[[${appId} is not compaatible with stack: ${stack.stack} for ${projectId}, skipping]]`); return; }
               }
 
               const setAttr = function(name, value) {
@@ -221,6 +222,7 @@ lib.configuration = function(argv_, context, callback) {
 
                   setAttr([color, 'fqdn'], fqdn);
                   setAttr([color, 'logfile'], path.join(logsDir, `${projectId}_${app.appName}.log`));
+                  setAttr([color, 'routes'], path.join(routesDir, fqdn));
 
                   if (useHttps) {
                     setAttr([color, 'certfile'], path.join(serverCertsDir, `${fqdn}.crt`));
@@ -304,6 +306,16 @@ lib.configuration = function(argv_, context, callback) {
               setOnn(subStack, ['fqdns', fqdn, 'keyfile', keyfile], keyfile);
             }
 
+            const clientCertfile = sg.extract(item, 'clientCert');
+            if (clientCertfile) {
+              setOnn(subStack, ['fqdns', fqdn, 'clientCert', clientCertfile], clientCertfile);
+            }
+
+            const routesDir = sg.extract(item, 'routes');
+            if (routesDir) {
+              setOnn(subStack, ['fqdns', fqdn, 'routes', routesDir], routesDir);
+            }
+
             if ('useHttp' in item) {
               x = sg.extract(item, 'useHttp');
               setOnna(subStack, ['fqdns', fqdn, 'useHttp'], x);
@@ -328,8 +340,13 @@ lib.configuration = function(argv_, context, callback) {
           });
 
           _.each(deref(subStack, ['fqdns']), (fqdnItem, fqdn) => {
-            if ((x = deref(subStack, ['fqdns', fqdn, 'certfile'])))     { setOnn(subStack, ['fqdns', fqdn, 'certfile'], _.keys(x)); }
-            if ((x = deref(subStack, ['fqdns', fqdn, 'keyfile'])))      { setOnn(subStack, ['fqdns', fqdn, 'keyfile'], _.keys(x)); }
+            if ((x = deref(subStack, ['fqdns', fqdn, 'certfile'])))               { setOnn(subStack, ['fqdns', fqdn, 'certfile'], _.keys(x)); }
+            if ((x = deref(subStack, ['fqdns', fqdn, 'keyfile'])))                { setOnn(subStack, ['fqdns', fqdn, 'keyfile'], _.keys(x)); }
+            if ((x = deref(subStack, ['fqdns', fqdn, 'clientCert'])))             { setOnn(subStack, ['fqdns', fqdn, 'clientCert'], _.keys(x)); }
+            if ((x = deref(subStack, ['fqdns', fqdn, 'routes'])))                 { setOnn(subStack, ['fqdns', fqdn, 'routes'], _.keys(x)); }
+            if ((x = deref(subStack, ['fqdns', fqdn, 'useHttp'])))                { setOnn(subStack, ['fqdns', fqdn, 'useHttp'], _.first(x)); }
+            if ((x = deref(subStack, ['fqdns', fqdn, 'useHttps'])))               { setOnn(subStack, ['fqdns', fqdn, 'useHttps'], _.first(x)); }
+            if ((x = deref(subStack, ['fqdns', fqdn, 'requireClientCerts'])))     { setOnn(subStack, ['fqdns', fqdn, 'requireClientCerts'], _.first(x)); }
 
             _.each(deref(fqdnItem, ['app_prj']), (fqdnAppPrj, fqdnAppPrjName) => {
               if ((x = deref(fqdnItem, ['app_prj', fqdnAppPrjName, 'mount'])))       { setOnn(fqdnItem, ['app_prj', fqdnAppPrjName, 'mount'], _.keys(x)); }
@@ -337,10 +354,12 @@ lib.configuration = function(argv_, context, callback) {
 
               if ((x = deref(fqdnItem, ['app_prj', fqdnAppPrjName, 'logfile']))) {
                 setOnn(fqdnItem, ['app_prj', fqdnAppPrjName, 'logfile'], _.keys(x));
-                setOnn(subStack, ['fqdns',   fqdn,           'logfile'], _.keys(x));
+                setOnn(subStack, ['fqdns',   fqdn,           'logfile'], sg.firstKey(x));
               }
             });
 
+            setOnn(subStack, ['fqdns', fqdn, 'root'], path.join(webRootRootDir, fqdn, 'webroot'));
+            setOnn(subStack, ['fqdns', fqdn, 'fqdn'], fqdn);
           });
 
           return sg.kv(m, name, subStack);
