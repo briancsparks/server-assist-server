@@ -183,7 +183,6 @@ lib.configuration = function(argv_, context, callback) {
               }
 
               const setAttr = function(name, value) {
-                //setOnn(result, ['app_prj', `${projectId}_${app.appName}`, stackName, name], value);
                 return setOnn(result, ['app_prj', `${projectId}_${app.appName}`, stackName, ...name], value);
               };
 
@@ -210,11 +209,11 @@ lib.configuration = function(argv_, context, callback) {
                 setAttr(['useHttps'], useHttps = stack.useHttps);
               }
 
+              // app.requireClientCerts has priority
               if ('requireClientCerts' in app) {
                 setAttr(['requireClientCerts'], requireClientCerts = app.requireClientCerts);
-              }
 
-              if ('requireClientCerts' in stack) {
+              } else if ('requireClientCerts' in stack) {
                 setAttr(['requireClientCerts'], requireClientCerts = stack.requireClientCerts);
               }
 
