@@ -47,7 +47,7 @@ cd "${start_dir}"
 # Now, find all the certs and keys needed by the new instance
 
 # Only pertains to web instances
-if [[ $stack == web ]]; then
+if [[ $service == web ]]; then
   for fqdn in $(cat $configuration | jq -r ".result | .subStacks | .[\"$color-$stack\"] | .fqdns | keys | .[]"); do
     echo $fqdn
 
