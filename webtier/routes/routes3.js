@@ -13,12 +13,14 @@ const clusterLib              = sg.include('js-cluster') || require('js-cluster'
 const clusterConfig           = require('../../ra-scripts/cluster-config');
 const Router                  = require('routes');
 
+const normlz                  = sg.normlz;
+const ServiceList             = clusterLib.ServiceList;
+
 const myIp                    = process.env.SERVERASSIST_MY_IP          || '127.0.0.1';
 const utilIp                  = process.env.SERVERASSIST_UTIL_HOSTNAME  || 'localhost';
 const myColor                 = process.env.SERVERASSIST_COLOR          || 'green';
 const myStack                 = process.env.SERVERASSIST_STACK          || 'test';
 
-const ServiceList             = clusterLib.ServiceList;
 const serviceList             = new ServiceList(['serverassist', myColor, myStack].join('-'), utilIp);
 
 var lib = {};
@@ -37,35 +39,35 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
 
     //console.error(sg.inspect(r), myColor, myStack);
 
-            const mkHandler = function(app_prjName, fqdn) {
-              /**
-               *  Handles requests and sends them to the right internal end-point
-               *  via `X-Accel-Redirect`.
-               *
-               *  Uses js-cluster's services to lookup a running instance of the appropriate
-               *  service; then uses `X-Accel-Redirect` to send Nginx there to retrieve the
-               *  real response.
-               */
-              const handler = function(req, res, params, splats) {
-                return serviceList.getOneService(app_prjName, (err, location) => {
-                  if (err)          { return sg._500(req, res, null, `Internal error `+err); }
-                  if (!location)    { return sg._404(req, res, null, `Cannot find ${app_prjName}`); }
+    const mkHandler = function(app_prjName, fqdn) {
+      /**
+       *  Handles requests and sends them to the right internal end-point
+       *  via `X-Accel-Redirect`.
+       *
+       *  Uses js-cluster's services to lookup a running instance of the appropriate
+       *  service; then uses `X-Accel-Redirect` to send Nginx there to retrieve the
+       *  real response.
+       */
+      const handler = function(req, res, params, splats) {
+        return serviceList.getOneService(app_prjName, (err, location) => {
+          if (err)          { return sg._500(req, res, null, `Internal error `+err); }
+          if (!location)    { return sg._404(req, res, null, `Cannot find ${app_prjName}`); }
 
-                  const rewritten         = req.url;
+          const rewritten         = req.url;
 
-                  const internalEndpoint  = location.replace(/^(http|https):[/][/]/i, '');
-                  const redir             = normlz(`/rpxi/${req.method}/${internalEndpoint}/${rewritten}`);
+          const internalEndpoint  = location.replace(/^(http|https):[/][/]/i, '');
+          const redir             = normlz(`/rpxi/${req.method}/${internalEndpoint}/${rewritten}`);
 
-                  verbose(2, `${fqdn}: ${appId} ->> ${redir}`);
+          console.log(`${fqdn}: ${app_prjName} ->> ${redir}`);
 
-                  res.statusCode = 200;
-                  res.setHeader('X-Accel-Redirect', redir);
-                  res.end('');
-                });
-              };
+          res.statusCode = 200;
+          res.setHeader('X-Accel-Redirect', redir);
+          res.end('');
+        });
+      };
 
-              return handler;
-            };
+      return handler;
+    };
 
     const stack = r.result.subStacks[`${myColor}-${myStack}`];
 
@@ -74,9 +76,9 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
       sg.setOn(servers, [fqdn, 'router'], Router());
 
       _.each(serverConfig.app_prj || {}, (app_prjConfig, app_prjName) => {
-        console.log(`Routing: ${sg.pad(fqdn, 35)} /${sg.lpad(app_prjConfig.route, 30)} ->> app: ${app_prjName}`);
+        console.log(`Routing: ${sg.pad(fqdn, 35)} /${sg.lpad(app_prjConfig.route+'*', 30)} ->> app: ${app_prjName}`);
         const handler = mkHandler(app_prjName, fqdn);
-        servers[fqdn].router.addRoute('/'+app_prjConfig.route, handler);
+        servers[fqdn].router.addRoute('/'+app_prjConfig.route+'*', handler);
       });
     });
 
