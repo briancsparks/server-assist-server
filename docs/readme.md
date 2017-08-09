@@ -83,8 +83,14 @@ To run an AMI made above:
 
 ## Or, use sa-server
 
+For one server:
 ```
 (cd ~/dev/server-assist-server/ && ./build-scripts/run-instance --instance-type=t2.large --service=web --stack=test --color=blue)
+```
+
+For both servers:
+```
+(cd ~/dev/server-assist-server/ && ./build-scripts/run-instance --instance-type=t2.large --service=web --stack=test --color=blue) & (cd ~/dev/server-assist-server/ && ./build-scripts/run-instance --instance-type=t2.large --service=netapp --stack=test --color=blue) & jobs; wait
 ```
 
 ## For Mario (non-sa):
