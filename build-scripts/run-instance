@@ -1,10 +1,22 @@
 #!/bin/bash -e
 
+#
+# Run an instance of the server-assist-server.
+#
+# 1. Gets the giant `configuration` JSON.
+# 2. Invokes js-cluster/run-instance, but do not allow it to start services.
+# 3. From the configuration, find all the certificates that will be needed by
+#    the instance, decrypts them, and copies them to the instance.
+# 4. Starts services
+#
+
 eval "$(cli-shezargs $@)"
 
 #
-# Pulls a credential from S3, decrypts it and puts it on a remote host during
-# a run-from-ami
+# Pulls a credential from S3, decrypts it and puts it on a remote host
+#
+# * Sets the mode to 400.
+# * Copies to protected dirs, and chowns them.
 #
 cpit() {
   the_pathname="$1"
@@ -30,6 +42,10 @@ cpit() {
 # Force js-cluster/run-instance to use my PID, so I can know what IP the instance was launched as
 as_pid="$$"
 
+# Calculate the domain name
+domain_name="mobilewebassist.net"
+[[ $stack != pub ]] && domain_name="mobiledevassist.net"
+
 # Get the big configuration JSON object
 configuration="/tmp/configuration-$$.json"
 ra invoke $scripts_dir/../ra-scripts/cluster-config.js configuration > $configuration
@@ -39,7 +55,8 @@ cd "$(fd ~/dev/ js-cluster$)"
 ./build-scripts/run-instance --skip-start --as-pid="$as_pid" --project-id="sa" --namespace="serverassist" "$orig_args"
 
 # Get the IP, die if we cannot
-ip="$(cat /tmp/run-instance-from-ami-${service}-${as_pid}.json | underscore select '.InstanceId ~ .PrivateIpAddress' --outfmt=text)"
+instance_start="/tmp/run-instance-from-ami-${service}-${as_pid}.json"
+ip="$(cat $instance_start | underscore select '.InstanceId ~ .PrivateIpAddress' --outfmt=text)"
 
 [[ -z $ip ]] && die "no ip"
 cd "${start_dir}"
@@ -54,14 +71,18 @@ if [[ $service == web ]]; then
     # Un-comment this line to see what the JSON looks like
     #cat $configuration | jq -r ".result | .subStacks | .[\"$color-$stack\"] | .fqdns | .[\"$fqdn\"]"
 
+    # Get the project name
     project="$(cat $configuration | jq -r ".result | .subStacks | .[\"$color-$stack\"] | .fqdns | .[\"$fqdn\"] | .projectName")"
 
+    # The certificate filename, if any
     file="$(cat $configuration | jq -r ".result | .subStacks | .[\"$color-$stack\"] | .fqdns | .[\"$fqdn\"] | .certfile")"
     [[ -n $file && $file != null ]] && cpit $(echo $file | jq -r '.[]') $project $ip
 
+    # The key filename, if any
     file="$(cat $configuration | jq -r ".result | .subStacks | .[\"$color-$stack\"] | .fqdns | .[\"$fqdn\"] | .keyfile")"
     [[ -n $file && $file != null ]] && cpit $(echo $file | jq -r '.[]') $project $ip
 
+    # The client root certificate, if any
     file="$(cat $configuration | jq -r ".result | .subStacks | .[\"$color-$stack\"] | .fqdns | .[\"$fqdn\"] | .clientCert")"
     [[ -n $file && $file != null ]] && cpit $(echo $file | jq -r '.[]') $project $ip
   done
@@ -71,4 +92,26 @@ fi
 ra invoke `fn ~/dev/ ssh\.js$` sshRun --ip=${ip} --command="./build-scripts/on-instance/b01-start-from-snapshot"  --message="${service}-sfss"
 ra invoke `fn ~/dev/ ssh\.js$` sshRun --ip=${ip} --command="./build-scripts/on-instance/b02-start-services"       --message="${service}-start"
 
+# Put this into rotation
+if [[ -z $no_rotation ]]; then
+
+  # Only do rotation when adding a web-tier instance
+  if [[ $service == web ]]; then
+
+    [[ -z $rotation ]] && rotation="next"
+
+    # Get the new instanceId
+    instance_id="$(cat $instance_start | jq -r '.[0] | [.. | .InstanceId?] | map(select(. != null)) | .[0]')"
+
+    # Give it the color-stack fqdn (or hq...)
+    fqdn="$color-$stack.$domain_name"
+    [[ $stack == cluster && $rotation == main ]] && fqdn="hq.$domain_name"
+
+    echo "----- Assigning new web instance $instance_id as $rotation at $fqdn"
+
+    ra invoke `fn $HOME/dev 'lib2/ec2/ec2.js'` moveEipForFqdn --instance-id="$instance_id" --fqdn="$fqdn"
+
+    set-routing --project-id=sa --stack="$stack" --color="$color" --state="$rotation"
+  fi
+fi
 
