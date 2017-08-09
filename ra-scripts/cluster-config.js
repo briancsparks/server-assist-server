@@ -158,14 +158,13 @@ lib.configuration = function(argv_, context, callback) {
           // We are processing the app records, which have not been fixed-up, like the
           // other types. So fix them up here
           app.appName     = _.rest(appId.split('_')).join('_');
-          app.mountPath   = _.compact(app.mount.split('/'));
-          app.routePath   = _.compact(app.route.split('/'));
+          app.mountPath   = _.compact((app.mount || '').split('/'));
+          app.routePath   = _.compact((app.route || '').split('/'));
 
           // Build a handle fn
 
           // Loop over each project that this app can work with
           _.each(projects, (project, projectId) => {
-
             // Is this app/project pair compatible?
             if (app.projectId !== projectId && app.mount[0] !== '*') {
               //console.error(`[[${appId} is not compaatible with project: ${projectId}, skipping]]`);
@@ -285,8 +284,8 @@ lib.configuration = function(argv_, context, callback) {
         });         // end apps
 
         // Move the interesting ones to the bottom of the list, for easily seeing them in debug-print
-        result.app_prj.sap_dbgtelemetry = sg.extract(result.app_prj, 'sap_dbgtelemetry');
-        result.app_prj.mwp_dbgtelemetry = sg.extract(result.app_prj, 'mwp_dbgtelemetry');
+        //result.app_prj.sap_dbgtelemetry = sg.extract(result.app_prj, 'sap_dbgtelemetry');
+        //result.app_prj.mwp_dbgtelemetry = sg.extract(result.app_prj, 'mwp_dbgtelemetry');
         result.app_prj.sa_dbgtelemetry  = sg.extract(result.app_prj, 'sa_dbgtelemetry');
         result.app_prj.sa_hq            = sg.extract(result.app_prj, 'sa_hq');
 
@@ -414,6 +413,3 @@ function mungePaths(prjUriBase, appPath_) {
 
   return [prjUriBase, ...appPath].join('/');
 }
-
-
-
