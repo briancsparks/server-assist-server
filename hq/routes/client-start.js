@@ -40,7 +40,11 @@ lib.addRoutes = function(addRoute, db, callback) {
     const clientId  = deref(req, 'serverassist.ids.clientId');
 
     if (!clientId)                                                                        { return false; }
-    if (clientId === '7B9qPWSIRh2EXElr4IQcLyrV3540klkqpjLpVtRuElSxyzWU5Tct0pNqA7cJDgnJ')  { return true; }
+
+    if (clientId === '7B9qPWSIRh2EXElr4IQcLyrV3540klkqpjLpVtRuElSxyzWU5Tct0pNqA7cJDgnJ')  { return true; }    /* brian android */
+    if (clientId === '1czKyQ6BgQh701Xhk8Tgmqb4M5h04JAaocJJGDo6nvXQbyyM2vt4AAg9TKoIyzCS')  { return true; }    /* brian mac */
+    if (clientId === 'TD0Gh10ramGuuECpnmNCYquZ4pmKnrR70nYEfhLfV0gQg4OkZSY5RcaGQqpNEAAz')  { return true; }    /* brian mac */
+
     if (clientId && (clientId.length > 0 && clientId.length <= 8))                        { return true; }
     if (clientId.length < 53 && clientId.startsWith('marioyoshipeach'))                   { return true; }
 
