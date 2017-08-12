@@ -377,7 +377,7 @@ lib.configuration = function(argv_, context, callback) {
       }], function() {
         db.close();
         result.subStacks = subStacks;
-        return callback(null, {projectRecords, stackRecords, instanceRecords, appRecords, result});
+        return callback(null, {projectRecords, stackRecords, instanceRecords, appRecords, result, myStack: subStacks[`${myColor}-${myStack}`]});
       });
     });
   });

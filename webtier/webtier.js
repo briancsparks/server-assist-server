@@ -27,6 +27,7 @@ const buildNginxConf          = ra.contextify(libBuildNginxConf.build);
 
 var   dumpReq;
 
+const configurationFilename   = path.join(process.env.HOME, 'configuration.json');
 const appName                 = 'webtier_router';
 const port                    = 8401;
 
@@ -86,7 +87,9 @@ const main = function() {
         if (err) { console.error(`Failed to add servers`); }
 
         configuration = configuration_;
-        return next();
+        return fs.writeFile(configurationFilename, JSON.stringify(configuration), (err) => {
+          return next();
+        });
       });
 
     }, function(next) {
