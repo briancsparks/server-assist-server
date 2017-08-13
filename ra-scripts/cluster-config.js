@@ -8,10 +8,10 @@ const serverassist            = sg.include('serverassist') || require('serverass
 const MongoClient             = require('mongodb').MongoClient;
 const path                    = require('path');
 
+const argvGet                 = sg.argvGet;
 const setOnn                  = sg.setOnn;
 const setOnna                 = sg.setOnna;
 const deref                   = sg.deref;
-const mongoHost               = serverassist.mongoHost();
 
 const myIp                    = process.env.SERVERASSIST_MY_IP          || '127.0.0.1';
 const utilIp                  = process.env.SERVERASSIST_UTIL_HOSTNAME  || 'localhost';
@@ -29,16 +29,22 @@ const colors                  = sg.reduce(colorList, {}, (m, color) => { return 
 
 var lib = {};
 
-lib.configuration = function(argv_, context, callback) {
+lib.configuration = function(argv, context, callback) {
   var result = {};
+
+  const dbName        = argvGet(argv, 'db-name,db');
+
+  const mongoHost     = serverassist.mongoHost(dbName);
 
   return MongoClient.connect(mongoHost, (err, db) => {
     const projectsDb  = db.collection('projects');
+    const partnersDb  = db.collection('partners');
     const stacksDb    = db.collection('stacks');
     const appsDb      = db.collection('apps');
 
     // What was returned from the DB (but indexed by the 'natural' id)
     var   projectRecords;
+    var   partnerRecords;
     var   stackRecords;
     var   instanceRecords;
     var   appRecords;
@@ -56,6 +62,16 @@ lib.configuration = function(argv_, context, callback) {
         if (err) { return sg.die(err, callback, 'configuration.each-project'); }
 
         projectRecords = sg.reduce(rawProjectRecords, {}, (m, project) => { return sg.kv(m, project.projectId, project); });
+        return next();
+      });
+
+    // ---------- partners ----------
+    }, function(next) {
+      return partnersDb.find({active:{$ne:false}}, {_id:0}).toArray((err, rawPartnerRecords) => {
+        if (err) { return sg.die(err, callback, 'configuration.each-partner'); }
+
+        partnerRecords = sg.reduce(rawPartnerRecords, {}, (m, partner) => { return sg.kv(m, partner.partnerId, partner); });
+
         return next();
       });
 
@@ -114,7 +130,7 @@ lib.configuration = function(argv_, context, callback) {
 
         stack.isAdminStack = !!stack.isAdminStack;
 
-        // Also, while we are looping over the stackRecords, populate result.project.sa[stackName]
+        // Also, while we are looping over the stackRecords, populate result.project._projectName_[stackName]
         setOnn(result, ['project', stack.projectId, stack.stack, 'projectName'],              project.projectName || _.first(project.uriBase.split('.')));
         setOnn(result, ['project', stack.projectId, stack.stack, 'useHttp'],                  stack.useHttp);
         setOnn(result, ['project', stack.projectId, stack.stack, 'useHttps'],                 stack.useHttps);
@@ -171,7 +187,7 @@ lib.configuration = function(argv_, context, callback) {
               return;
             }
 
-            // Loop over each project that this app can work with
+            // Loop over each stack that this app can work with
             _.each(stacks, (stack, stackName) => {
               var useHttp, useHttps, requireClientCerts;
 
@@ -192,6 +208,7 @@ lib.configuration = function(argv_, context, callback) {
               setAttr(['mount'],    mungePaths(project.urlPath, app.mountPath));
               setAttr(['route'],    mungePaths(project.urlPath, app.routePath));
 
+              // TODO: app should have priority, right?
               if ('useHttp' in app) {
                 setAttr(['useHttp'], useHttp = app.useHttp);
               }
@@ -272,12 +289,9 @@ lib.configuration = function(argv_, context, callback) {
                 }
               });
 
-              // For debug, change the false to true, so the stack/app/project objects are attached
-              if (false && (appId === 'sa_hq' || appId === 'sa_dbgtelemetry')) {
-                setOnn(result, ['app_prj', `${projectId}_${app.appName}`, stackName, 'stack'],    stack);
-                setOnn(result, ['app_prj', `${projectId}_${app.appName}`, stackName, 'app'],      app);
-                setOnn(result, ['app_prj', `${projectId}_${app.appName}`, stackName, 'project'],  project);
-              }
+              setOnn(result, ['app_prj', `${projectId}_${app.appName}`, stackName, 'stack'],    stack);
+              setOnn(result, ['app_prj', `${projectId}_${app.appName}`, 'app'],      app);
+              setOnn(result, ['app_prj', `${projectId}_${app.appName}`, 'project'],  project);
 
             });     // end stacks
           });       // end projects
@@ -289,10 +303,24 @@ lib.configuration = function(argv_, context, callback) {
         result.app_prj.sa_dbgtelemetry  = sg.extract(result.app_prj, 'sa_dbgtelemetry');
         result.app_prj.sa_hq            = sg.extract(result.app_prj, 'sa_hq');
 
+        //
+        //  At this point, we have built a tree of config data that details what each project,
+        //  and app combination needs out of each server block. Now, we combine this into what
+        //  each server block (calld `subStacks` here) has to look like, in order to live up
+        //  to what the project/app requires.
+        //
+
         subStacks = sg.reduce(subStacks, {}, (m, subStack_, name) => {
           var subStack = sg.deepCopy(subStack_);
           _.each(result.app_prj, (app_prj, app_prjName) => {
             const fqdn = deref(app_prj, [subStack.stack, subStack.color, 'fqdn']);
+
+            const app       = app_prj.app;
+            const project   = app_prj.project;
+
+            //// Uncomment these to see the app, and project items
+            //setOnn(subStack, ['fqdns', fqdn, "app_prj", app_prjName, 'dbgAppPrj', 'app'], sg.deepCopy(app));
+            //setOnn(subStack, ['fqdns', fqdn, "app_prj", app_prjName, 'dbgAppPrj', 'project'], sg.deepCopy(project));
 
             var x;
             var item = sg.deepCopy(deref(app_prj, [subStack.stack, subStack.color]) || {});
@@ -354,15 +382,25 @@ lib.configuration = function(argv_, context, callback) {
             if ((x = deref(subStack, ['fqdns', fqdn, 'useHttps'])))               { setOnn(subStack, ['fqdns', fqdn, 'useHttps'], _.first(x)); }
             if ((x = deref(subStack, ['fqdns', fqdn, 'requireClientCerts'])))     { setOnn(subStack, ['fqdns', fqdn, 'requireClientCerts'], _.first(x)); }
 
+            var alternate = {};
             _.each(deref(fqdnItem, ['app_prj']), (fqdnAppPrj, fqdnAppPrjName) => {
-              if ((x = deref(fqdnItem, ['app_prj', fqdnAppPrjName, 'mount'])))       { setOnn(fqdnItem, ['app_prj', fqdnAppPrjName, 'mount'], _.keys(x)); }
-              if ((x = deref(fqdnItem, ['app_prj', fqdnAppPrjName, 'route'])))       { setOnn(fqdnItem, ['app_prj', fqdnAppPrjName, 'route'], _.keys(x)); }
+              const app = result.app_prj[fqdnAppPrjName].app;
+
+              var appForSubdomain = alternate;
+              if (app.appName && fqdn.startsWith(app.appName)) {
+                appForSubdomain = deref(subStack, ['fqdns', fqdn]);
+              }
+
+              setOnn(fqdnItem, ['app_prj', fqdnAppPrjName, 'mount'],    sg.firstKey(deref(fqdnItem, ['app_prj', fqdnAppPrjName, 'mount'])));
+              setOnn(fqdnItem, ['app_prj', fqdnAppPrjName, 'route'],    sg.firstKey(deref(fqdnItem, ['app_prj', fqdnAppPrjName, 'route'])));
+              setOnn(fqdnItem, ['app_prj', fqdnAppPrjName, 'logfile'],  sg.firstKey(deref(fqdnItem, ['app_prj', fqdnAppPrjName, 'logfile'])));
 
               if ((x = deref(fqdnItem, ['app_prj', fqdnAppPrjName, 'logfile']))) {
-                setOnn(fqdnItem, ['app_prj', fqdnAppPrjName, 'logfile'], _.keys(x));
-                setOnn(subStack, ['fqdns',   fqdn,           'logfile'], sg.firstKey(x));
+                setOnn(appForSubdomain, ['logfile'], x);
               }
             });
+
+            setOnn(subStack, ['fqdns', fqdn], _.defaults(deref(subStack, ['fqdns', fqdn]), alternate));
 
             setOnn(subStack, ['fqdns', fqdn, 'root'],         path.join(webRootRootDir, fqdn, 'webroot'));
             setOnn(subStack, ['fqdns', fqdn, 'projectName'],  sg.firstKey(deref(subStack, ['fqdns', fqdn, 'projectName'])));
@@ -377,7 +415,7 @@ lib.configuration = function(argv_, context, callback) {
       }], function() {
         db.close();
         result.subStacks = subStacks;
-        return callback(null, {projectRecords, stackRecords, instanceRecords, appRecords, result, myStack: subStacks[`${myColor}-${myStack}`]});
+        return callback(null, {db:{projectRecords, partnerRecords, stackRecords, instanceRecords, appRecords}, result, myStack: subStacks[`${myColor}-${myStack}`]});
       });
     });
   });

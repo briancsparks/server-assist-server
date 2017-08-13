@@ -49,7 +49,7 @@ The script is `server-assist-server/build-scripts/build-instance`
 Build with the basic options, make an AMI
 
 ```
-(cd ~/dev/server-assist-server/ && ./build-scripts/build-instance --color=blue --service=web --stack=cluster)
+(cd ~/dev/server-assist-server/ && ./build-scripts/build-instance --color=teal --service=web --stack=cluster)
 
 --base-name=    [xenial]
 --skip-ami      [no]
@@ -67,7 +67,7 @@ You probably want to build both the web and netapp instance types:
 The same script can be used to launch an instance from the current state. (Also uses --skip-ami= and --no-terminate=)
 
 ```
-(cd ~/dev/server-assist-server/ && ./build-scripts/build-instance --color=blue --service=web --stack=test --skip-ami --no-terminate)
+(cd ~/dev/server-assist-server/ && ./build-scripts/build-instance --color=teal --service=web --stack=test --skip-ami --no-terminate)
 ```
 
 # JS-Cluster is used again to launch the created AMIs
@@ -77,20 +77,20 @@ To run an AMI made above:
 * js-cluster/build-scripts/run-instance
 
 ```
-(cd ~/dev/js-cluster/ && ./build-scripts/run-instance --project-id=sa --instance-type=t2.large --namespace=serverassist --service=web --stack=test --color=blue)
-(cd ~/dev/js-cluster/ && ./build-scripts/run-instance --project-id=sa --instance-type=t2.large --namespace=serverassist --service=web --key=mario_prod --stack=pub --color=blue)
+(cd ~/dev/js-cluster/ && ./build-scripts/run-instance --project-id=sa --instance-type=t2.large --namespace=serverassist --service=web --stack=test --color=teal)
+(cd ~/dev/js-cluster/ && ./build-scripts/run-instance --project-id=sa --instance-type=t2.large --namespace=serverassist --service=web --key=mario_prod --stack=pub --color=teal)
 ```
 
 ## Or, use sa-server
 
 For one server:
 ```
-(cd ~/dev/server-assist-server/ && ./build-scripts/run-instance --instance-type=t2.large --service=web --stack=test --color=blue)
+(cd ~/dev/server-assist-server/ && ./build-scripts/run-instance --instance-type=t2.large --service=web --stack=test --color=teal)
 ```
 
 For both servers:
 ```
-(cd ~/dev/server-assist-server/ && ./build-scripts/run-instance --instance-type=t2.large --service=web --stack=test --color=blue) & (cd ~/dev/server-assist-server/ && ./build-scripts/run-instance --instance-type=t2.large --service=netapp --stack=test --color=blue) & jobs; wait
+(cd ~/dev/server-assist-server/ && ./build-scripts/run-instance --instance-type=t2.large --service=web --stack=test --color=teal) & (cd ~/dev/server-assist-server/ && ./build-scripts/run-instance --instance-type=t2.large --service=netapp --stack=test --color=teal) & jobs; wait
 ```
 
 ## For Mario (non-sa):
