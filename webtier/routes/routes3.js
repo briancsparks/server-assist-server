@@ -39,7 +39,7 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
 
     //console.error(sg.inspect(r), myColor, myStack);
 
-    const mkHandler = function(app_prjName, fqdn) {
+    const mkHandler_ = function(app_prjName, fqdn) {
       /**
        *  Handles requests and sends them to the right internal end-point
        *  via `X-Accel-Redirect`.
@@ -75,10 +75,23 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
     _.each(stack.fqdns || {}, (serverConfig, fqdn) => {
       sg.setOn(servers, [fqdn, 'router'], Router());
 
+      const mkHandler = function(name) {
+        return mkHandler_(name, fqdn);
+      };
+
+      const addRoute = function(name, route, handler) {
+        console.log(`Routing: ${sg.pad(fqdn, 35)} ${sg.lpad(route, 30)} ->> app: ${name}`);
+        servers[fqdn].router.addRoute(route, handler);
+      };
+
       _.each(serverConfig.app_prj || {}, (app_prjConfig, app_prjName) => {
-        console.log(`Routing: ${sg.pad(fqdn, 35)} /${sg.lpad(app_prjConfig.route+'*', 30)} ->> app: ${app_prjName}`);
-        const handler = mkHandler(app_prjName, fqdn);
-        servers[fqdn].router.addRoute('/'+app_prjConfig.route+'*', handler);
+
+        const handler = mkHandler(app_prjName);
+        addRoute(app_prjName, '/'+app_prjConfig.route, handler);
+        addRoute(app_prjName, '/'+app_prjConfig.route+'/*', handler);
+        if (_.last(app_prjName.split('_')) === _.first(fqdn.split('.'))) {
+          addRoute(app_prjName, '/*', handler);
+        }
       });
     });
 

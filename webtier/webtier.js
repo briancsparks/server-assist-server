@@ -119,13 +119,13 @@ const main = function() {
             }
 
             /* otherwise -- Did not match the route to any handler */
-            const msg = `Host ${host} is known, path ${pathname} is not.`;
+            const msg = `Webtier: Host ${host} is known, path ${pathname} is not.`;
             console.error(msg);
             return sg._404(req, res, null, msg);
           }
 
           /* otherwise -- no Router() object; 400 */
-          const msg = `Host ${host} is unknown.`;
+          const msg = `Webtier: Host ${host} is unknown.`;
           console.error(msg);
           return sg._400(req, res, null, msg);
         });
