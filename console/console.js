@@ -20,7 +20,6 @@ const myIp                    = serverassist.myIp();
 const myName                  = 'console.js';
 
 const main = function() {
-
   const dbName                = ARGV.dbName || 'serverassist';
   const port                  = ARGV.port   || 8402;
 
@@ -47,12 +46,13 @@ const main = function() {
       const server = http.createServer((req, res) => {
         return sg.getBody(req, function() {
 
-          const pathname      = urlLib.parse(req.url).pathname;
+          const url           = urlLib.parse(req.url, true);
+          const pathname      = url.pathname;
           const host          = req.headers.host;
           const match         = router.match(pathname);
 
           if (match && _.isFunction(match.fn)) {
-            return match.fn(req, res, match.params, match.splats, match);
+            return match.fn(req, res, match.params, match.splats, url.query, match);
           }
 
           /* otherwise -- Did not match the route to any handler */

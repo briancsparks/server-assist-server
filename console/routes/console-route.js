@@ -10,6 +10,8 @@ const clusterConfig           = require('../../ra-scripts/cluster-config');
 const urlLib                  = require('url');
 
 const normlz                  = sg.normlz;
+const deref                   = sg.deref;
+const setOnn                  = sg.setOnn;
 const registerAsServiceApp    = serverassist.registerAsServiceApp;
 const registerAsService       = serverassist.registerAsService;
 const myIp                    = serverassist.myIp();
@@ -17,9 +19,6 @@ const myColor                 = serverassist.myColor();
 const myStack                 = serverassist.myStack();
 const utilIp                  = serverassist.utilIp();
 const ServiceList             = clusterLib.ServiceList;
-
-//const serviceList             = new ServiceList(['serverassist', myColor, myStack].join('-'), utilIp);
-const serviceList             = new ServiceList(['serverassist', 'green', 'test'].join('-'), utilIp);
 
 
 const appId                   = 'sa_console';
@@ -38,60 +37,91 @@ const appRecord = {
   subdomain           : 'console.'
 };
 
+var serviceFinders = {};
+
 var lib = {};
 
 lib.addRoutes = function(addRoute, onStart, db, callback) {
   var r;
 
-  const consoleHandler = function(req, res, params, splats, match) {
+  const usersDb       = db.collection('users');
+  const stacksDb      = db.collection('stacks');
 
-    // Nginx might be configured to allow client certs 'optionally' -- however, they are not optional
-    const clientVerify = req.headers['x-client-verify'];
-    if (!clientVerify)                                      { return serverassist._403(req, res); }
-    if (clientVerify !== 'SUCCESS')                         { return serverassist._403(req, res); }
+  const mkHandler = function(kind) {
+    return function(req, res, params, splats, query, match) {
 
-    const fqdn            = req.headers.host;
-    const domainName      = _.last(fqdn.split('.'), 2).join('.');
+      // Nginx might be configured to allow client certs 'optionally' -- however, they are not optional
+      const clientVerify = req.headers['x-client-verify'];
+      if (!clientVerify)                                      { return serverassist._403(req, res); }
+      if (clientVerify !== 'SUCCESS')                         { return serverassist._403(req, res); }
 
-    var { project, app }  = params;
+      const subject         = req.headers['x-client-s-dn'];
+      const subjDn          = sg.parseOn2Chars(subject, '/', '=');
 
-    // Make sure we have a project
-    if (!project) {
-      project = sg.reduce(r.result.app_prj, null, (m, app_prj, app_prjName) => {
-        if (m)  { return m; }
-        const p = app_prj.project;
+      if (!subjDn.CN)                                         { return serverassist._403(req, res); }
+      return usersDb.find({username:subjDn.CN}).toArray((err, users) => {
+        if (err)                                              { return serverassist._403(req, res); }
+        var user = (users || [])[0] || {};
 
-        if (p.pqdn === domainName)                          { return p.projectId; }
-        if ((p.uriBase || '').startsWith(domainName))       { return p.projectId; }
-        if ((p.uriTestBase || '').startsWith(domainName))   { return p.projectId; }
+        const fqdn            = req.headers.host;
+        const domainName      = _.last(fqdn.split('.'), 2).join('.');
 
-        return m;
+        var { project, app }  = params;
+        var projectId         = project;
+
+        // Make sure we have a project
+        if (!projectId) {
+          projectId = sg.reduce(r.result.app_prj, null, (m, app_prj, app_prjName) => {
+            if (m)  { return m; }
+            const p = app_prj.project;
+            project = p;
+
+            if (p.pqdn === domainName)                          { return p.projectId; }
+            if ((p.uriBase || '').startsWith(domainName))       { return p.projectId; }
+            if ((p.uriTestBase || '').startsWith(domainName))   { return p.projectId; }
+
+            return m;
+          });
+        }
+        //console.log(params, splats, project, app);
+
+        if (!projectId)                                         { return serverassist._403(req, res); }
+
+        const app_prjName = `${projectId}_${kind}_${app}`;
+
+        const projectName = 'serverassist';
+        const serviceFinder = deref(serviceFinders, [projectName]) ||  serverassist.getServiceFinder(projectName, ['all']);
+
+        setOnn(serviceFinders, [projectName], serviceFinder);
+
+        return serviceFinder.getOneServiceLocation(app_prjName, (err, location) => {
+          if (err)          { return sg._500(req, res, null, `Internal error `+err); }
+          if (!location) {
+            console.error(`Cannot find ${app_prjName}`);
+            return sg._404(req, res, null, `Cannot find ${app_prjName}`);
+          }
+
+          if (splats.length === 0) {
+            dumpReq(req, res);
+          }
+
+          const rewritten         = `/${splats.join('/')}`;
+
+          const internalEndpoint  = location.replace(/^(http|https):[/][/]/i, '');
+          const redir             = normlz(`/rpxi/${req.method}/${internalEndpoint}/${rewritten}`);
+
+          console.log(`${fqdn}: ${app_prjName} ->> ${redir}`);
+
+          res.statusCode = 200;
+          res.setHeader('X-Accel-Redirect', redir);
+          res.end('');
+        });
       });
-    }
-    //console.log(params, splats, project, app);
-
-    const app_prjName = `${project}_console_${app}`;
-
-    return serviceList.getOneService(app_prjName, (err, location) => {
-      if (err)          { return sg._500(req, res, null, `Internal error `+err); }
-      if (!location)    { return sg._404(req, res, null, `Cannot find ${app_prjName}`); }
-
-      if (splats.length === 0) {
-        dumpReq(req, res);
-      }
-
-      const rewritten         = `/${splats.join('/')}`;
-
-      const internalEndpoint  = location.replace(/^(http|https):[/][/]/i, '');
-      const redir             = normlz(`/rpxi/${req.method}/${internalEndpoint}/${rewritten}`);
-
-      console.log(`${fqdn}: ${app_prjName} ->> ${redir}`);
-
-      res.statusCode = 200;
-      res.setHeader('X-Accel-Redirect', redir);
-      res.end('');
-    });
+    };
   };
+
+  const consoleHandler = mkHandler('console');
+  const xapiHandler = mkHandler('xapi');
 
 
 
@@ -114,10 +144,16 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
     // Add a root route for each project
     _.each(r.result.app_prj, (app_prj, app_prjName) => {
       if (app_prj.app.appId === appId) {
+        addRoute(`/:project(${app_prj.project.projectId})`, '/:app/xapi', consoleHandler);
+        addRoute(`/:project(${app_prj.project.projectId})`, '/:app/xapi/*', consoleHandler);
+
         addRoute(`/:project(${app_prj.project.projectId})`, '/:app', consoleHandler);
         addRoute(`/:project(${app_prj.project.projectId})`, '/:app/*', consoleHandler);
       }
     });
+
+    addRoute('', '/:app/xapi', xapiHandler);
+    addRoute('', '/:app/xapi/*', xapiHandler);
 
     addRoute('', '/:app', consoleHandler);
     addRoute('', '/:app/*', consoleHandler);
