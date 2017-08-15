@@ -12,6 +12,7 @@ const urlLib                  = require('url');
 const normlz                  = sg.normlz;
 const deref                   = sg.deref;
 const setOnn                  = sg.setOnn;
+const redirectToService       = serverassist.redirectToService;
 const registerAsServiceApp    = serverassist.registerAsServiceApp;
 const registerAsService       = serverassist.registerAsService;
 const myIp                    = serverassist.myIp();
@@ -44,10 +45,15 @@ var lib = {};
 lib.addRoutes = function(addRoute, onStart, db, callback) {
   var r;
 
-  const usersDb       = db.collection('users');
-  const stacksDb      = db.collection('stacks');
+  const usersDb                 = db.collection('users');
+  const stacksDb                = db.collection('stacks');
 
-  const mkHandler = function(kind) {
+  var   systemServiceInstances  = [];
+
+  const mkHandler = function(kind, options_) {
+    const options         = options_ || {};
+    const rewriteIsSplats = options.rewriteIsSplats || false;
+
     return function(req, res, params, splats, query, match) {
 
       // Nginx might be configured to allow client certs 'optionally' -- however, they are not optional
@@ -65,8 +71,9 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
 
         const fqdn            = req.headers.host;
         const domainName      = _.last(fqdn.split('.'), 2).join('.');
+        const url             = urlLib.parse(req.url, true);
 
-        var { project, app }  = params;
+        var { project, app, version }  = params;
         var projectId         = project;
 
         // Make sure we have a project
@@ -87,41 +94,41 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
 
         if (!projectId)                                         { return serverassist._403(req, res); }
 
-        const app_prjName = `${projectId}_${kind}_${app}`;
-
+        const app_prjName = _.compact([projectId, kind, app, version]).join('_');
         const projectName = 'serverassist';
-        const serviceFinder = deref(serviceFinders, [projectName]) ||  serverassist.getServiceFinder(projectName, ['all']);
 
+        // ---------- Get the service finder ----------
+        if (systemServiceInstances.length === 0) {
+          systemServiceInstances = sg.reduce(r.db.instanceRecords, systemServiceInstances, (m, instance) => {
+            if (instance.projectId !== projectId) { return m; }
+
+            if (m.length < 4) { m = [null, null, null, null]; }
+
+            if (instance.stack === 'pub' && instance.state === 'main')         { m[0] = instance; }
+            else if (instance.stack === 'pub' && instance.state === 'next')    { m[1] = instance; }
+            else if (instance.stack === 'test' && instance.state === 'main')   { m[2] = instance; }
+            else if (instance.stack === 'test' && instance.state === 'next')   { m[3] = instance; }
+            else if (instance.state !== 'gone')                                { m.push(instance); }
+
+            return m;
+          });
+          systemServiceInstances = _.compact(systemServiceInstances);
+
+          console.log('ssi', systemServiceInstances);
+        }
+
+        const serviceFinder = deref(serviceFinders, [projectName]) ||  serverassist.getServiceFinder(projectName, systemServiceInstances);
         setOnn(serviceFinders, [projectName], serviceFinder);
 
         return serviceFinder.getOneServiceLocation(app_prjName, (err, location) => {
-          if (err)          { return sg._500(req, res, null, `Internal error `+err); }
-          if (!location) {
-            console.error(`Cannot find ${app_prjName}`);
-            return sg._404(req, res, null, `Cannot find ${app_prjName}`);
-          }
-
-          if (splats.length === 0) {
-            dumpReq(req, res);
-          }
-
-          const rewritten         = `/${splats.join('/')}`;
-
-          const internalEndpoint  = location.replace(/^(http|https):[/][/]/i, '');
-          const redir             = normlz(`/rpxi/${req.method}/${internalEndpoint}/${rewritten}`);
-
-          console.log(`${fqdn}: ${app_prjName} ->> ${redir}`);
-
-          res.statusCode = 200;
-          res.setHeader('X-Accel-Redirect', redir);
-          res.end('');
+          return redirectToService(req, res, app_prjName, err, location, rewriteIsSplats && `/${splats.join('/')}`);
         });
       });
     };
   };
 
-  const consoleHandler = mkHandler('console');
-  const xapiHandler = mkHandler('xapi');
+  const consoleHandler  = mkHandler('console', {rewriteIsSplats:true});
+  const xapiHandler     = mkHandler('xapi');
 
 
 
@@ -134,7 +141,8 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
       if (err) { return sg.die(err, callback, 'addRoutesToServers.clusterConfig.configuration'); }
 
       r = r_;
-      //console.log(r.result.app_prj);
+      //console.log(sg.inspect(r.result.app_prj));
+      //console.log(sg.inspect(r));
       return next();
     });
 
@@ -144,21 +152,21 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
     // Add a root route for each project
     _.each(r.result.app_prj, (app_prj, app_prjName) => {
       if (app_prj.app.appId === appId) {
-        addRoute(`/:project(${app_prj.project.projectId})`, '/:app/xapi', consoleHandler);
-        addRoute(`/:project(${app_prj.project.projectId})`, '/:app/xapi/*', consoleHandler);
+        addRoute(`/:project(${app_prj.project.projectId})`, '/:app/xapi/v:version',   xapiHandler);
+        addRoute(`/:project(${app_prj.project.projectId})`, '/:app/xapi/v:version/*', xapiHandler);
 
-        addRoute(`/:project(${app_prj.project.projectId})`, '/:app', consoleHandler);
-        addRoute(`/:project(${app_prj.project.projectId})`, '/:app/*', consoleHandler);
+        addRoute(`/:project(${app_prj.project.projectId})`, '/:app',                  consoleHandler);
+        addRoute(`/:project(${app_prj.project.projectId})`, '/:app/*',                consoleHandler);
       }
     });
 
-    addRoute('', '/:app/xapi', xapiHandler);
-    addRoute('', '/:app/xapi/*', xapiHandler);
+    addRoute('', '/:app/xapi/v:version',    xapiHandler);
+    addRoute('', '/:app/xapi/v:version/*',  xapiHandler);
 
-    addRoute('', '/:app', consoleHandler);
-    addRoute('', '/:app/*', consoleHandler);
+    addRoute('', '/:app',                   consoleHandler);
+    addRoute('', '/:app/*',                 consoleHandler);
 
-    addRoute('', '/*', consoleHandler);
+    addRoute('', '/*',                      consoleHandler);
 
     return next();
 

@@ -9,12 +9,14 @@
  */
 const sg                      = require('sgsg');
 const _                       = sg._;
+const serverassist            = sg.include('serverassist') || require('serverassist');
 const clusterLib              = sg.include('js-cluster') || require('js-cluster');
 const clusterConfig           = require('../../ra-scripts/cluster-config');
 const Router                  = require('routes');
 
 const normlz                  = sg.normlz;
 const ServiceList             = clusterLib.ServiceList;
+const redirectToService       = serverassist.redirectToService;
 
 const myIp                    = process.env.SERVERASSIST_MY_IP          || '127.0.0.1';
 const utilIp                  = process.env.SERVERASSIST_UTIL_HOSTNAME  || 'localhost';
@@ -50,19 +52,7 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
        */
       const handler = function(req, res, params, splats) {
         return serviceList.getOneService(app_prjName, (err, location) => {
-          if (err)          { return sg._500(req, res, null, `Internal error `+err); }
-          if (!location)    { return sg._404(req, res, null, `Cannot find ${app_prjName}`); }
-
-          const rewritten         = req.url;
-
-          const internalEndpoint  = location.replace(/^(http|https):[/][/]/i, '');
-          const redir             = normlz(`/rpxi/${req.method}/${internalEndpoint}/${rewritten}`);
-
-          console.log(`${fqdn}: ${app_prjName} ->> ${redir}`);
-
-          res.statusCode = 200;
-          res.setHeader('X-Accel-Redirect', redir);
-          res.end('');
+          return redirectToService(req, res, app_prjName, err, location);
         });
       };
 
