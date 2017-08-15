@@ -11,7 +11,6 @@ const http                    = require('http');
 const urlLib                  = require('url');
 const MongoClient             = require('mongodb').MongoClient;
 const router                  = require('routes')();
-const routes                  = require('./routes/routes');
 
 const ARGV                    = sg.ARGV();
 const mkAddRoute              = serverassist.mkAddRoute;
@@ -35,11 +34,11 @@ const main = function() {
     return sg.__run([function(next) {
 
       // Load routes
-      return routes.addRoutes(addRoute, onStarters, db, (err) => {
-        if (err)      { return sg.die(err, `Could not add routes`); }
+      const routesFiles = ['./routes/console-route'];
 
-        return next();
-      });
+      return sg.__each(routesFiles, (file, nextFile) => {
+        return require(file).addRoutes(addRoute, onStarters, db, nextFile);
+      }, next);
 
     }, function(next) {
       // ---------- Run the server ----------

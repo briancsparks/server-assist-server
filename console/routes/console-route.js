@@ -38,17 +38,16 @@ const appRecord = {
   subdomain           : 'console.'
 };
 
-var serviceFinders = {};
-
 var lib = {};
 
 lib.addRoutes = function(addRoute, onStart, db, callback) {
-  var r;
 
   const usersDb                 = db.collection('users');
   const stacksDb                = db.collection('stacks');
 
-  var   systemServiceInstances  = [];
+  var   r;
+  var   systemServiceInstances  = {};
+  var   serviceFinders          = {};
 
   const mkHandler = function(kind, options_) {
     const options         = options_ || {};
@@ -98,24 +97,8 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
         const projectName = 'serverassist';
 
         // ---------- Get the service finder ----------
-        if (systemServiceInstances.length === 0) {
-          systemServiceInstances = sg.reduce(r.db.instanceRecords, systemServiceInstances, (m, instance) => {
-            if (instance.projectId !== projectId) { return m; }
-
-            if (m.length < 4) { m = [null, null, null, null]; }
-
-            if (instance.stack === 'pub' && instance.state === 'main')         { m[0] = instance; }
-            else if (instance.stack === 'pub' && instance.state === 'next')    { m[1] = instance; }
-            else if (instance.stack === 'test' && instance.state === 'main')   { m[2] = instance; }
-            else if (instance.stack === 'test' && instance.state === 'next')   { m[3] = instance; }
-            else if (instance.state !== 'gone')                                { m.push(instance); }
-
-            return m;
-          });
-          systemServiceInstances = _.compact(systemServiceInstances);
-        }
-
-        const serviceFinder = deref(serviceFinders, [projectName]) ||  serverassist.getServiceFinder(projectName, systemServiceInstances);
+        const systemServiceInstances_ = _.toArray(systemServiceInstances[projectId].all);
+        const serviceFinder = deref(serviceFinders, [projectName]) ||  serverassist.getServiceFinder(projectName, systemServiceInstances_);
         setOnn(serviceFinders, [projectName], serviceFinder);
 
         return serviceFinder.getOneServiceLocation(app_prjName, (err, location) => {
@@ -135,14 +118,54 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
 
   }, function(next) {
 
-    return clusterConfig.configuration({}, {}, (err, r_) => {
-      if (err) { return sg.die(err, callback, 'addRoutesToServers.clusterConfig.configuration'); }
+    runConfig(next);
+    function runConfig(next_) {
+      sg.setTimeout(10000, runConfig);
 
-      r = r_;
-      //console.log(sg.inspect(r.result.app_prj));
-      //console.log(sg.inspect(r));
-      return next();
-    });
+      //console.log('Reconfiguring');
+
+      const next = next_ || function(){};
+      return clusterConfig.configuration({}, {}, (err, r_) => {
+        if (err) { return sg.die(err, callback, 'addRoutesToServers.clusterConfig.configuration'); }
+
+        r = r_;
+        //console.log(sg.inspect(r.result.app_prj));
+        //console.log(sg.inspect(r));
+
+        // Make a temp, to build-up new ssi
+        var projects  = {};
+        var ssi       = {};
+        _.each(r.db.instanceRecords, (instance) => {
+          const { projectId, stack, state } = instance;
+
+          projects[projectId] = projectId;
+          ssi[projectId]      = ssi[projectId] || {prod:[null,null,null,null], staging:[null,null,null,null], test:[null,null,null,null], test_next:[null,null,null,null], all:[null,null,null,null]};
+
+          var prod            = ssi[projectId].prod;
+          var staging         = ssi[projectId].staging;
+          var test            = ssi[projectId].test;
+          var test_next       = ssi[projectId].test_next;
+          var all             = ssi[projectId].all;
+
+          if      (stack === 'pub' && state === 'main')    { all[0] = prod[0]       = instance; staging.push(instance); }
+          else if (stack === 'pub' && state === 'next')    { all[1] = staging[1]    = instance; }
+          else if (stack === 'test' && state === 'main')   { all[2] = test[2]       = instance; }
+          else if (stack === 'test' && state === 'next')   { all[3] = test_next[3]  = instance; }
+          else if (state !== 'gone')                       { all.push(instance); }
+        });
+
+        _.each(_.keys(projects), projectId => {
+          _.each(_.keys(ssi[projectId]), key => {
+            ssi[projectId][key] = _.compact(ssi[projectId][key]);
+          });
+        });
+
+        systemServiceInstances  = sg.extend(ssi);
+        serviceFinders          = {};
+
+        return next();
+      });
+    }
 
   }, function(next) {
     // Add routes
