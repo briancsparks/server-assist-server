@@ -9,7 +9,8 @@ if [[ $service == web ]]; then
   (cd ~/dev/server-assist-server/webtier && pm2 start webtier.js -- --vverbose --main)
 
   if [[ $stack == cluster ]]; then
-    (cd ~/dev/server-assist-server/hq && pm2 start hq.js -- --vverbose --main)
+    (cd ~/dev/server-assist-server/hq      && pm2 start hq.js      -- --vverbose --main)
+    (cd ~/dev/server-assist-server/console && pm2 start console.js -- --vverbose --main)
   fi
 fi
 
