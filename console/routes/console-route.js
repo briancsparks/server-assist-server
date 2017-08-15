@@ -113,8 +113,6 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
             return m;
           });
           systemServiceInstances = _.compact(systemServiceInstances);
-
-          console.log('ssi', systemServiceInstances);
         }
 
         const serviceFinder = deref(serviceFinders, [projectName]) ||  serverassist.getServiceFinder(projectName, systemServiceInstances);

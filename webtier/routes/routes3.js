@@ -11,12 +11,12 @@ const sg                      = require('sgsg');
 const _                       = sg._;
 const serverassist            = sg.include('serverassist') || require('serverassist');
 const clusterLib              = sg.include('js-cluster') || require('js-cluster');
-const clusterConfig           = require('../../ra-scripts/cluster-config');
 const Router                  = require('routes');
 
 const normlz                  = sg.normlz;
 const ServiceList             = clusterLib.ServiceList;
 const redirectToService       = serverassist.redirectToService;
+const configuration           = serverassist.configuration;
 
 const myIp                    = process.env.SERVERASSIST_MY_IP          || '127.0.0.1';
 const utilIp                  = process.env.SERVERASSIST_UTIL_HOSTNAME  || 'localhost';
@@ -36,7 +36,7 @@ var lib = {};
  *  @param {Object}      config   - The overall configuration.
  */
 lib.addRoutesToServers = function(db, servers, config, callback) {
-  return clusterConfig.configuration({}, {}, (err, r) => {
+  return configuration({}, {}, (err, r) => {
     if (err) { return sg.die(err, callback, 'addRoutesToServers.clusterConfig.configuration'); }
 
     //console.error(sg.inspect(r), myColor, myStack);
