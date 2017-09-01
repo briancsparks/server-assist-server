@@ -7,13 +7,3 @@ eval "$(cli-shezargs $@)"
 # Let the code from js-cluster do its start-from-snapshot code
 (cd ${scripts_dir}/../../build/on-instance && ./b01-start-from-snapshot)
 
-#jsaws-set-env SERVERASSIST_MY_IP "$(curl -s 'http://169.254.169.254/latest/meta-data/local-ipv4')"
-#
-#my_keyname="$(curl -s http://169.254.169.254/latest/meta-data/public-keys/ | cut -d= -f2)"
-#if [[ $my_keyname =~ prod ]]; then
-#  jsaws-set-env NODE_ENV production
-#else
-#  jsaws-set-env NODE_ENV development
-#fi
-
-

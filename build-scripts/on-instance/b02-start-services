@@ -2,6 +2,9 @@
 
 eval "$(cli-shezargs $@)"
 
+[[ -z $service ]] && service="$SERVERASSIST_SERVICE"
+[[ -z $stack   ]] && stack="$SERVERASSIST_STACK"
+
 # Get the webtier script running, it causes the nginx.conf file to be generated
 if [[ $service == web ]]; then
   (cd ~/dev/server-assist-server/webtier && pm2 start webtier.js -- --vverbose --main)
@@ -10,11 +13,8 @@ fi
 # Let the code from js-cluster do its start-services code
 (cd ${scripts_dir}/../../build/on-instance && ./b02-start-services)
 
-[[ -z $service ]] && service="$SERVERASSIST_SERVICE"
-[[ -z $stack   ]] && stack="$SERVERASSIST_STACK"
-
+# Now do our other services for the webtier
 if [[ $service == web ]]; then
-#  (cd ~/dev/server-assist-server/webtier && pm2 start webtier.js -- --vverbose --main)
 
   if [[ $stack == cluster ]]; then
     (cd ~/dev/server-assist-server/hq      && pm2 start hq.js      -- --vverbose --main)
