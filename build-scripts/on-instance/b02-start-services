@@ -7,7 +7,7 @@ eval "$(cli-shezargs $@)"
 
 # Get the webtier script running, it causes the nginx.conf file to be generated
 if [[ $service == web ]]; then
-  (cd ~/dev/server-assist-server/webtier && pm2 start webtier.js -- --vverbose --main)
+  (cd ~/dev/server-assist-server/webtier && pm2 start webtier.js -- --verbose --main)
 fi
 
 # Let the code from js-cluster do its start-services code
@@ -17,13 +17,13 @@ fi
 if [[ $service == web ]]; then
 
   if [[ $stack == cluster ]]; then
-    (cd ~/dev/server-assist-server/hq      && pm2 start hq.js      -- --vverbose --main)
-    (cd ~/dev/server-assist-server/console && pm2 start console.js -- --vverbose --main)
+    (cd ~/dev/server-assist-server/hq      && pm2 start hq.js      -- --verbose --main)
+    (cd ~/dev/server-assist-server/console && pm2 start console.js -- --verbose --main)
   fi
 fi
 
 
 if [[ $service == netapp ]]; then
-  (cd ~/dev/attr-man && pm2 start attr-man.js -- --vverbose --main)
+  (cd ~/dev/attr-man && pm2 start attr-man.js -- --verbose --main)
 fi
 
