@@ -13,17 +13,23 @@ fi
 # Let the code from js-cluster do its start-services code
 (cd ${scripts_dir}/../../build/on-instance && ./b02-start-services)
 
-# Now do our other services for the webtier
-if [[ $service == web ]]; then
+# Which services we start depends a lot on being on the cluster servers or not
+if [[ $stack == cluster ]]; then
 
-  if [[ $stack == cluster ]]; then
+  # Start the special HQ and console services only on the cluster instances
+  if [[ $service == web ]]; then
     (cd ~/dev/server-assist-server/hq      && pm2 start hq.js      -- --verbose --main)
     (cd ~/dev/server-assist-server/console && pm2 start console.js -- --verbose --main)
   fi
-fi
 
+else
 
-if [[ $service == netapp ]]; then
-  (cd ~/dev/attr-man && pm2 start attr-man.js -- --verbose --main)
+  # We are not on the cluster stack, start normal stuff
+
+  # Start the attribute-stream receiver
+  if [[ $service == netapp ]]; then
+    (cd ~/dev/attr-man          && pm2 start attr-man.js  -- --verbose --main)
+    (cd ~/dev/netlab-telemetry  && pm2 start telemetry.js -- --verbose --main --public)
+  fi
 fi
 
