@@ -48,7 +48,7 @@ domain_name="mobilewebassist.net"
 
 # Get the big configuration JSON object
 configuration="/tmp/configuration-$$.json"
-ra invoke $scripts_dir/../ra-scripts/cluster-config.js configuration > $configuration
+ra invoke `fn ~/dev 'serverassist/serverassist\.js'` configuration > $configuration
 
 # ---------- Run via js-cluster/run-instance ----------
 cd "$(fd ~/dev/ js-cluster$)"

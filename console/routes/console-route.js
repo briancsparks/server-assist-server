@@ -6,7 +6,6 @@ const sg                      = require('sgsg');
 const _                       = sg._;
 const serverassist            = sg.include('serverassist') || require('serverassist');
 const clusterLib              = sg.include('js-cluster')   || require('js-cluster');
-const clusterConfig           = require('../../ra-scripts/cluster-config');
 const urlLib                  = require('url');
 
 const normlz                  = sg.normlz;
@@ -125,8 +124,8 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
       //console.log('Reconfiguring');
 
       const next = next_ || function(){};
-      return clusterConfig.configuration({}, {}, (err, r_) => {
-        if (err) { return sg.die(err, callback, 'addRoutesToServers.clusterConfig.configuration'); }
+      return serverassist.configuration({}, {}, (err, r_) => {
+        if (err) { return sg.die(err, callback, 'addRoutesToServers.serverassist.configuration'); }
 
         r = r_;
         //console.log(sg.inspect(r.result.app_prj));
