@@ -75,8 +75,12 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
     _.each(stack.fqdns || {}, (serverConfig, fqdn) => {
       sg.setOn(servers, [fqdn, 'router'], Router());
 
+      var xapiUrlPrefixes = [];
+      var xapiHandler;
+      var handlers        = {};
+
       const mkHandler = function(name) {
-        return mkHandler_(name, fqdn);
+        return (handlers[name] = mkHandler_(name, fqdn));
       };
 
       const addRoute = function(name, route, handler) {
@@ -89,22 +93,22 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
 
         //console.log(`--configuring ${fqdn}, ${app_prjName}, /${app_prjConfig.route}`);
         const handler = mkHandler(app_prjName);
+
         addRoute(app_prjName, '/'+app_prjConfig.route, handler);
         addRoute(app_prjName, '/'+app_prjConfig.route+'/*', handler);
 
         // ---------- Special processing for core sa apps ----------
-
-        // The app gets to handle the root path, if it owns the subdomain (sa_console for console.mobilewebassist.net)
-        if (_.last(app_prjName.split('_')) === _.first(fqdn.split('.'))) {
-          //console.log(`  --configuring for subdomain ${_.first(fqdn.split('.'))}`);
-          addRoute(app_prjName, '/*', handler);
-        }
 
         // xapi
         if (appName === 'xapi') {
           const xapiRec = r.db.appRecords.sa_xapi;
           //console.log(`  --configuring for ${appName}`);
 
+          if (projectId === 'sa') {
+            xapiHandler = handler;
+          }
+
+          xapiUrlPrefixes = _.toArray(xapiRec.urlPrefixes);
           _.each(xapiRec.urlPrefixes, urlPrefix => {
             addRoute(app_prjName, `/${urlPrefix}/${appName}/${projectId}/v:version`, handler);
             addRoute(app_prjName, `/${urlPrefix}/${appName}/${projectId}/v:version/*`, handler);
@@ -113,6 +117,32 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
           addRoute(app_prjName, `/${projectId}/${appName}`, handler);
           addRoute(app_prjName, `/${projectId}/${appName}/*`, handler);
 
+        }
+
+      });
+
+      // ---------- Special processing for core sa apps without project ----------
+
+      // xapi
+      if (xapiHandler) {
+        const appName = 'xapi';
+        _.each(xapiUrlPrefixes, urlPrefix => {
+          addRoute(`sa_xapi`, `/${urlPrefix}/${appName}/v:version`, xapiHandler);
+          addRoute(`sa_xapi`, `/${urlPrefix}/${appName}/v:version/*`, xapiHandler);
+        });
+
+        addRoute(`sa_xapi`, `/${appName}`, xapiHandler);
+        addRoute(`sa_xapi`, `/${appName}/*`, xapiHandler);
+      }
+
+      // ---------- More special processing for core sa apps ----------
+
+      // The app gets to handle the root path, if it owns the subdomain (sa_console for console.mobilewebassist.net)
+      _.each(serverConfig.app_prj || {}, (app_prjConfig, app_prjName) => {
+
+        // This has to be last, or noone else can handle any routes
+        if (_.last(app_prjName.split('_')) === _.first(fqdn.split('.'))) {
+          addRoute(app_prjName, '/*', handlers[app_prjName]);
         }
 
       });

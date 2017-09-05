@@ -59,7 +59,7 @@ const main = function() {
           }
 
           /* otherwise -- Did not match the route to any handler */
-          return sg._404(req, res, null, `Host ${host} is known, path ${pathname} is not.`);
+          return serverassist._404(req, res, null, `Host ${host} is known, path ${pathname} is not.`);
         });
       });
 

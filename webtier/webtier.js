@@ -121,6 +121,7 @@ const main = function() {
             /* otherwise -- Did not match the route to any handler */
             const msg = `Webtier: Host ${host} is known, path ${pathname} is not.`;
             console.error(msg);
+            dumpReq_(req, res);
             return serverassist._404(req, res, null, msg);
           }
 
