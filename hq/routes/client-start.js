@@ -134,8 +134,8 @@ lib.addRoutes = function(addRoute, db, callback) {
         });
 
         // Add our handler for the only route we handle here.
-        addRoute('/:project/api/:version', '/clientStart', handlers.clientStart);
-        addRoute('/:project',              '/clientStart', handlers.clientStart);
+        addRoute('/:projectId/api/:version', '/clientStart', handlers.clientStart);
+        addRoute('/:projectId',              '/clientStart', handlers.clientStart);
 
         return callback();
 
