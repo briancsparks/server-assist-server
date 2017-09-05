@@ -8,11 +8,13 @@ const urlLib                  = require('url');
 const serverassist            = sg.include('serverassist') || require('serverassist');
 
 const deref                   = sg.deref;
+const setOnn                  = sg.setOnn;
 const isClientCertOk          = serverassist.isClientCertOk;
 const myColor                 = serverassist.myColor();
 const myStack                 = serverassist.myStack();
 const registerAsServiceApp    = serverassist.registerAsServiceApp;
 const registerAsService       = serverassist.registerAsService;
+const redirectToService       = serverassist.redirectToService;
 
 const appId                   = 'sa_xapi';
 const mount                   = '*/xapi/v1/';
@@ -47,23 +49,24 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
    *  Handles requests for xapi data for different projects.
    */
   const mkHandler = function(app_prj, app_prjName, options_) {
-    var   projectName = app_prj.project.projectNameCommon || app_prj.project.projectName;
+    const projectId   = app_prj.project.projectId;
+    const projectName = app_prj.project.projectNameCommon || app_prj.project.projectName;
 
-    return function(req, res, params, splats, query, match) {
+    return (handlers[projectId] = function(req, res, params, splats, query, match) {
       return isClientCertOk(req, res, usersDb, (err, isOk, user) => {
         if (err)    { console.error(err); return serverassist._403(req, res); }
         if (!isOk)  {  return serverassist._403(req, res); }
 
         /* otherwise */
-        const serviceFinder = deref(serviceFinders, [projectName]) || setOnn(serviceFinders, projectName, serverassist.mkServiceFinder(projectName, "prod,or_test", r));
+        const serviceFinder = deref(serviceFinders, [projectName]) || setOnn(serviceFinders, projectName, serverassist.mkServiceFinder(projectName, projectId, "prod,or_test", r));
 
-        const serviceName = _.compact([app_prjName, params.version]).join('_');
+        const serviceName = _.compact([app_prjName, params.tname, params.version]).join('_');
         return serviceFinder.getOneServiceLocation(serviceName, (err, location) => {
           //return redirectToService(req, res, serviceName, err, location, rewriteIsSplats && `/${splats.join('/')}`);
           return redirectToService(req, res, serviceName, err, location);
         });
       });
-    };
+    });
   };
 
   /**
@@ -72,6 +75,7 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
   const handleUnProject = function(req, res, params, splats, query, match) {
     var projectId = '';
 
+    projectId = 'sa';
     const handler = handlers[projectId];
 
     if (!handler) {
