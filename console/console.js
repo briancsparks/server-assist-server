@@ -28,7 +28,7 @@ const main = function() {
     if (err)      { return sg.die(err, `Could not connect to DB ${mongoHost}`); }
 
     const myServiceLocation   = `http://${myIp}:${port}`;
-    const addRoute            = mkAddRoute(myName, router, myServiceLocation);
+    const addRoute            = mkAddRoute(myServiceLocation, router, myName);
     var   onStarters          = [];
 
     return sg.__run([function(next) {
@@ -61,7 +61,7 @@ const main = function() {
 
       // ---------- Listen on --port ----------
       server.listen(port, myIp, () => {
-        console.log(`${myName} running console at http://${myIp}:${port}/`);
+        //console.log(`${myName} running console at http://${myIp}:${port}/`);
 
         _.each(onStarters, onStart => {
           onStart(port, myIp);

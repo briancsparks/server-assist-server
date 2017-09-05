@@ -25,7 +25,7 @@ const myStack                 = serverassist.myStack();
 const myColor                 = serverassist.myColor();
 const buildNginxConf          = ra.contextify(libBuildNginxConf.build);
 
-var   dumpReq;
+var   dumpReq, dumpReq_;
 
 const configurationFilename   = path.join(process.env.HOME, 'configuration.json');
 const appName                 = 'webtier_router';
@@ -121,13 +121,14 @@ const main = function() {
             /* otherwise -- Did not match the route to any handler */
             const msg = `Webtier: Host ${host} is known, path ${pathname} is not.`;
             console.error(msg);
-            return sg._404(req, res, null, msg);
+            return serverassist._404(req, res, null, msg);
           }
 
           /* otherwise -- no Router() object; 400 */
           const msg = `Webtier: Host ${host} is unknown.`;
           console.error(msg);
-          return sg._400(req, res, null, msg);
+          dumpReq_(req, res);
+          return serverassist._400(req, res, null, msg);
         });
       });
 
@@ -185,14 +186,18 @@ const main = function() {
   });
 };
 
+dumpReq_ = function(req, res) {
+  console.log(req.method, req.url);
+  _.each(req.headers, function(value, key) {
+    console.log(sg.pad(key, 20), value);
+  });
+  console.log(sg.inspect(req.bodyJson));
+  console.log('--------');
+};
+
 dumpReq = function(req, res) {
   if (sg.verbosity() >= 3) {
-    console.log(req.method, req.url);
-    _.each(req.headers, function(value, key) {
-      console.log(sg.pad(key, 20), value);
-    });
-    console.log(sg.inspect(req.bodyJson));
-    console.log('--------');
+    return dumpReq_(req, res);
   }
 };
 

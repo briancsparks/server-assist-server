@@ -31,7 +31,7 @@ const main = function() {
     const port                = ARGV.port || 8400;
     const myServiceLocation   = `http://${myIp}:${port}`;
 
-    const addRoute            = mkAddRoute(hqAppName, router, myServiceLocation);
+    const addRoute            = mkAddRoute(myServiceLocation, router, hqAppName);
 
     return sg.__run([function(next) {
       // Do whatever for this specific server

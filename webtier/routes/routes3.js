@@ -1,11 +1,22 @@
 
 /**
- *  Finds apps and apis that are registered in the DB, and routes them to
- *  any service that is active.
+ *  When a request arrives to the ServerAssist cluster, the server-assist-server/webtier module
+ *  handles it. The request first arrives to the NGINX process, which reverse-proxies it to the
+ *  webtier.js file that hosts the Node.js http server. webtier.js looks up a `routes` handler
+ *  in its `servers` table, and calls the handler.
  *
- *  The apps collection is a mapping between fqdn+pathroot ->> service_name. So,
- *  when a request comes in for fqdn.net/pathroot/..., it gets sent to the running service
- *  (via X-Accel-Redirect.)
+ *  That handler is setup in this module at startup time. This module calls serverassist.configuration to
+ *  get a big JSON that details what the cluster looks like. This module uses that JSON to build
+ *  the `servers` object.
+ *
+ *  At runtime, various apps are running on various stacks. When a request comes in, this module
+ *  finds a running instance of the app and routes to it. It usually routes to an app within its
+ *  own cluster, but not always.
+ *
+ *  The JSON contains information to build the mapping between fqdn/uribase and a service name.
+ *  When the request arrives, this module responds to NGINX with an X-Accel-Redirect to the instance
+ *  that is running the app.
+ *
  */
 const sg                      = require('sgsg');
 const _                       = sg._;
@@ -61,7 +72,6 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
 
     const stack = r.result.subStacks[`${myColor}-${myStack}`];
 
-    console.log("Routing");
     _.each(stack.fqdns || {}, (serverConfig, fqdn) => {
       sg.setOn(servers, [fqdn, 'router'], Router());
 
@@ -70,18 +80,41 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
       };
 
       const addRoute = function(name, route, handler) {
-        console.log(`Routing: ${sg.pad(fqdn, 35)} ${sg.lpad(route, 30)} ->> app: ${name}`);
+        console.log(`${sg.pad(fqdn, 35)} ${sg.lpad(route, 55)} ->> ${name}`);
         servers[fqdn].router.addRoute(route, handler);
       };
 
       _.each(serverConfig.app_prj || {}, (app_prjConfig, app_prjName) => {
+        const [projectId, appName] = app_prjName.split('_');
 
+        //console.log(`--configuring ${fqdn}, ${app_prjName}, /${app_prjConfig.route}`);
         const handler = mkHandler(app_prjName);
         addRoute(app_prjName, '/'+app_prjConfig.route, handler);
         addRoute(app_prjName, '/'+app_prjConfig.route+'/*', handler);
+
+        // ---------- Special processing for core sa apps ----------
+
+        // The app gets to handle the root path, if it owns the subdomain (sa_console for console.mobilewebassist.net)
         if (_.last(app_prjName.split('_')) === _.first(fqdn.split('.'))) {
+          //console.log(`  --configuring for subdomain ${_.first(fqdn.split('.'))}`);
           addRoute(app_prjName, '/*', handler);
         }
+
+        // xapi
+        if (appName === 'xapi') {
+          const xapiRec = r.db.appRecords.sa_xapi;
+          //console.log(`  --configuring for ${appName}`);
+
+          _.each(xapiRec.urlPrefixes, urlPrefix => {
+            addRoute(app_prjName, `/${urlPrefix}/${appName}/${projectId}/v:version`, handler);
+            addRoute(app_prjName, `/${urlPrefix}/${appName}/${projectId}/v:version/*`, handler);
+          });
+
+          addRoute(app_prjName, `/${projectId}/${appName}`, handler);
+          addRoute(app_prjName, `/${projectId}/${appName}/*`, handler);
+
+        }
+
       });
     });
 

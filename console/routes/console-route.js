@@ -88,7 +88,7 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
             return m;
           });
         }
-        //console.log(params, splats, project, app);
+        //console.log(subjDn.CN, params, splats, subjDn, project, app);
 
         if (!projectId)                                         { return serverassist._403(req, res); }
 
@@ -172,16 +172,10 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
     // Add a root route for each project
     _.each(r.result.app_prj, (app_prj, app_prjName) => {
       if (app_prj.app.appId === appId) {
-        addRoute(`/:project(${app_prj.project.projectId})`, '/:app/xapi/v:version',   xapiHandler);
-        addRoute(`/:project(${app_prj.project.projectId})`, '/:app/xapi/v:version/*', xapiHandler);
-
-        addRoute(`/:project(${app_prj.project.projectId})`, '/:app',                  consoleHandler);
-        addRoute(`/:project(${app_prj.project.projectId})`, '/:app/*',                consoleHandler);
+        addRoute(`/:project(${app_prj.project.projectId})`, '/:app',                  consoleHandler, app_prjName);
+        addRoute(`/:project(${app_prj.project.projectId})`, '/:app/*',                consoleHandler, app_prjName);
       }
     });
-
-    addRoute('', '/:app/xapi/v:version',    xapiHandler);
-    addRoute('', '/:app/xapi/v:version/*',  xapiHandler);
 
     addRoute('', '/:app',                   consoleHandler);
     addRoute('', '/:app/*',                 consoleHandler);
@@ -198,8 +192,9 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
         // Add startup notification handlers
         onStart.push(function(port, myIp) {
           const myServiceLocation   = `http://${myIp}:${port}`;
+          const myMount             = deref(app_prj, [myStack, myColor, 'mount']) || mount;
 
-          console.log(`${sg.pad(app_prjName, 30)} : [${myServiceLocation}/${mount}]`);
+          console.log(`${sg.pad(app_prjName, 35)} [${myServiceLocation}] (for /${myMount})`);
           registerMyService();
 
           function registerMyService() {
