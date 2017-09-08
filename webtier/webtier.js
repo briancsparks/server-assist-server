@@ -1,4 +1,21 @@
 
+/**
+ *  This file contains the Node.js http-server object for all the web-tier instances.
+ *
+ *  It actually does not do very much, outside the actual HTTP listener. Most of the
+ *  actual work happens in other files:
+ *
+ *  * serverassist/lib/sa-modules/cluster-config.js -- Builds the configuration of the
+ *          cluster into a giant JSON object. This JSON gets saved to ~/configuration.json
+ *
+ *  * routes/routes3.js -- Takes the configuration JSON and buils `routes` objects, and
+ *          puts them onto various `server` objects (one for each `server` in the nginx.conf
+ *          file.)
+ *
+ *  Then, this file takes those `server` objects and routes requests to them.
+ *
+ */
+
 const sg                      = require('sgsg');
 const _                       = sg._;
 const request                 = sg.extlibs.superagent;
@@ -35,6 +52,9 @@ var servers = {};
 var config  = {};
 var configuration;
 
+/**
+ *  main()
+ */
 const main = function() {
 
   const fqdnStr = ARGV.fqdn || ARGV.fqdns || '';
@@ -82,7 +102,7 @@ const main = function() {
       //  Load routes from apps
       //
 
-      // ----------- Load apps from the DB ----------
+      // ----------- Load the configuration ----------
       return routes.addRoutesToServers(db, servers, config, (err, configuration_) => {
         if (err) { console.error(`Failed to add servers`); }
 
@@ -120,15 +140,13 @@ const main = function() {
 
             /* otherwise -- Did not match the route to any handler */
             const msg = `Webtier: Host ${host} is known, path ${pathname} is not.`;
-            console.error(msg);
-            dumpReq_(req, res);
+            serverassist.handledAsBadRequest(req, res, msg);
             return serverassist._404(req, res, null, msg);
           }
 
           /* otherwise -- no Router() object; 400 */
           const msg = `Webtier: Host ${host} is unknown.`;
-          console.error(msg);
-          dumpReq_(req, res);
+          serverassist.handledAsBadRequest(req, res, msg);
           return serverassist._400(req, res, null, msg);
         });
       });
