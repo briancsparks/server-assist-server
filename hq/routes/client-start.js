@@ -9,7 +9,9 @@ const clusterLib              = sg.include('js-cluster')   || require('js-cluste
 const urlLib                  = require('url');
 
 var   ARGV                    = sg.ARGV();
+const verbose                 = sg.verbose;
 const setOn                   = sg.setOn;
+const setOnn                  = sg.setOnn;
 const deref                   = sg.deref;
 const skip                    = sg.skip;
 const reason                  = sg.reason;
@@ -52,6 +54,7 @@ lib.addRoutes = function(addRoute, db, callback) {
   };
 
   const debugLog = function(req) {
+    //if (!isSpecialClient) { return; }
     return;
     var args      = _.rest(arguments);
 
@@ -68,19 +71,48 @@ lib.addRoutes = function(addRoute, db, callback) {
     console.log(`${from} ->> ${to}, ${why}`);
   };
 
-  return projectsDb.find({}).toArray((err, projectRecords) => {
+  // Get the projects records from the DB
+  return projectsDb.find({active:{$ne:false}}, {_id:0}).toArray((err, projectRecords) => {
     if (err)  { return sg.die(err, callback, 'clientStart-main.find-projects'); }
 
+    // Make a projects list, indexed by projectId
     const projectsById = sg.reduce(projectRecords, {}, (m, project) => {
       return sg.kv(m, project.projectId, project);
     });
 
-    return appsDb.find({}).toArray((err, appRecords) => {
+    // Get the apps records from the dB
+    return appsDb.find({active:{$ne:false}}, {_id:0}).toArray((err, appRecords) => {
       if (err)  { return sg.die(err, callback, 'clientStart-main.find-apps'); }
 
+      //
+      // Make an apps list, indexed by appId
+      //
+      // For any app that is multi-use ('*' for root of route), also add an app for 
+      // that projectId_appId.
+      //
+
       const appsById = sg.reduce(appRecords, {}, (m, app) => {
+
+        if (app.mount[0] === '*') {
+          _.each(projectsById, (project, projectId) => {
+            var app2    = sg.deepCopy(app);
+            var app2Id  = [projectId, ...(_.rest(app.appId.split('_')))].join('_');
+
+            app2.projectId  = projectId;
+            app2.appId      = app2Id;
+
+            m[app2Id]       = app2;
+          });
+        }
+
         return sg.kv(m, app.appId, app);
       });
+
+      // Dump the apps
+      //_.each(appsById, (app, appId) => {
+      //  console.log(`all appbyid ${app.appId}`, app);
+      //});
+
 
       return sg.__run(function main() {
 
@@ -136,6 +168,7 @@ lib.addRoutes = function(addRoute, db, callback) {
         // Add our handler for the only route we handle here.
         addRoute('/:projectId/api/:version', '/clientStart', handlers.clientStart);
         addRoute('/:projectId',              '/clientStart', handlers.clientStart);
+        addRoute('',                         '/clientStart', handlers.clientStart);
 
         return callback();
 
@@ -193,7 +226,7 @@ lib.addRoutes = function(addRoute, db, callback) {
            */
           const badRequest = function(error) {
             console.error('Client error while handling /clientStart', error);
-            return sg._400(req, res, null, error);
+            return serverassist._400(req, res, null, error);
           };
 
           /**
@@ -203,7 +236,7 @@ lib.addRoutes = function(addRoute, db, callback) {
            */
           const internalError = function(error) {
             console.error('Server error while handling /clientStart', error);
-            return sg._500(req, res, null, error);
+            return serverassist._500(req, res, null, error);
           };
 
           if (isSpecialClient(req)) {
@@ -482,30 +515,31 @@ lib.addRoutes = function(addRoute, db, callback) {
           }, function(next) {
 
             const upstream      = result.upstream;
-            const projectId     = req.serverassist.ids.projectId;
-            const project       = projectsById[projectId];
-            const projectPath   = _.rest(_.compact(project.uriBase.split('/')));
+            //const projectIds    = _.compact([req.serverassist.ids.baseProjectId, req.serverassist.ids.projectId]);
+            const projectIds    = _.compact([req.serverassist.ids.projectId]);
 
-            _.each(appRecords, app => {
-              if (app.projectId !== projectId)  { return; }
-              if (app.subdomain)                { return; }
-              if (app.requireClientCerts)       { return; }   // TODO: determine if they sent a client cert with this request
+            _.each(appsById, app => {
+              if (projectIds.indexOf(app.projectId) === -1)   { return; }
+              if (app.subdomain)                              { return; }
+              if (app.requireClientCerts)                     { return; }   // TODO: determine if they sent a client cert with this request
 
               // Fixup props
               if (sg.isnt(app.useHttp))               { app.useHttp             = !app.isAdminApp; }
               if (sg.isnt(app.useHttps))              { app.useHttps            = app.isAdminApp; }
               if (sg.isnt(app.requireClientCerts))    { app.requireClientCerts  = false; }
 
-              const protocol = app.useHttps? 'https' : 'http';
+              const project       = projectsById[app.projectId] || {};
+              const projectPath   = _.rest(_.compact((project.uriBase || '').split('/')));
+              const protocol      = app.useHttps? 'https' : 'http';
 
-              var appPath   = _.compact(app.mount.split('/'));
+              var appPath         = _.compact(app.mount.split('/'));
               if (_.last(projectPath) === _.first(appPath) || _.first(appPath) === '*') {
                 appPath.shift();
               }
 
               appPath = [...projectPath, ...appPath].join('/');
 
-              const appName = app.appId;
+              const appName = _.rest(app.appId.split('_')).join('_');
 
               setOn(result, ['upstreams', appName], protocol+'://'+normlz(`${upstream}/${appPath}`));
             });
@@ -514,6 +548,10 @@ lib.addRoutes = function(addRoute, db, callback) {
           }], function() {
 
             // Success!
+            if (isSpecialClient(req)) {
+              console.log(`/clientStart result:`, sg.inspect(result));
+            }
+
             return sg._200(req, res, result);
 
           });
@@ -561,7 +599,61 @@ lib.addRoutes = function(addRoute, db, callback) {
 
           /* otherwise */
           return [parts[0], 'main'].join('_');
-        }
+        };
+
+        /**
+         *  Finds the stack for a project/upstream combo.
+         *
+         *  Knows that projects might have a `base` attr, which should be
+         *  tried as a backup.
+         */
+        const findStack = function(req, upstream, projectId, attempt, callback) {
+          var query = stackAlias(upstream || 'prod');
+
+          sg.setOnn(query, 'projectId', projectId);
+
+          var stack;
+          return sg.__run([function(next) {
+
+            return stacksDb.find(query).toArray(function(err, stacks) {
+              if (sg.ok(err, stacks)) { stack = stacks[0]; }
+
+              verbose(3, `findStack: ${upstream} projectId: ${query.projectId}`, query, err, stacks);
+              return next();
+            });
+
+          }, function(next) {
+
+            if (stack)        { return next(); }    /* already have it */
+            if (!projectId)   { return next(); }    /* no use trying further, dont have project */
+
+            // We did not find the stack above. Try any base project
+            return projectsDb.find({projectId}).toArray(function(err, projects) {
+              if (!sg.ok(err, projects))    { return next(); }
+              if (projects.length < 1)      { return next(); }
+              if (!projects[0].base)        { return next(); }
+
+              sg.setOnn(query, 'projectId', projects[0].base);
+              return stacksDb.find(query).toArray(function(err, stacks) {
+                if (sg.ok(err, stacks)) { stack = stacks[0]; }
+
+                verbose(3, `findStack: ${upstream} projectId: ${query.projectId}`, query, err, stacks);
+
+                // We found the stack by using the projects base project
+                setOnn(req, 'serverassist.ids.baseProjectId', query.projectId);
+                return next();
+              });
+            });
+
+          }], function() {
+            if (!stack) {
+              console.log(`Failed to find stack from DB on ${attempt} attempt`, sg.inspect(query));
+              return callback();
+            }
+
+            return callback(null, stack);
+          });
+        };
 
         /**
          *  Determine if your desired stack has a running service.
@@ -569,16 +661,12 @@ lib.addRoutes = function(addRoute, db, callback) {
          *  If not, the callback will be called with `undefined` or `null` as
          *  the service.
          */
-        const getServiceFromUpstream = function(upstream, projectId, serviceName, callback) {
-          var query = stackAlias(upstream || 'prod');
+        const getServiceFromUpstream = function(req, upstream, projectId, serviceName, attempt, callback) {
 
-          sg.setOnn(query, 'projectId', projectId);
+          return findStack(req, upstream, projectId, attempt, (err, stack) => {
+            if (!sg.ok(err, stack)) { return callback(); }
 
-          return stacksDb.find(query).toArray(function(err, stacks) {
-            if (err || !stacks)       { return callback(); }
-            if (stacks.length === 0)  { return callback(); }
-
-            return getStackService(stacks[0].color, stacks[0].stack, serviceName, callback);
+            return getStackService(stack.color, stack.stack, serviceName, callback);
           });
         };
 
@@ -598,7 +686,7 @@ lib.addRoutes = function(addRoute, db, callback) {
             return sg.__run([function(next) {
 
               // See if the upstream stack is up and running
-              return getServiceFromUpstream(result.upstream, req.serverassist.ids.projectId, serviceName, function(err, service) {
+              return getServiceFromUpstream(req, result.upstream, req.serverassist.ids.projectId, serviceName, 'first', function(err, service) {
                 debugLog(req, `upstream: ${result.upstream} for ${clientId}, project: ${req.serverassist.ids.projectId}:${serviceName}: service:`, err, service);
 
                 if (err || !service || !_.isArray(service))  { return next(); }    // Try the next option
@@ -620,7 +708,7 @@ lib.addRoutes = function(addRoute, db, callback) {
               // We found a fallback -- now we must determine if it is up and running, just like above.
               logChangeToUpstream(req, result.upstream, fallback, `greenBlue-determine-fallback1`);
               result.upstream = fallback;
-              return getServiceFromUpstream(result.upstream, req.serverassist.projectId, serviceName, function(err, service) {
+              return getServiceFromUpstream(req, result.upstream, req.serverassist.projectId, serviceName, 'last', function(err, service) {
                 debugLog(req, `fallback upstream: ${result.upstream} for ${clientId}, project: ${req.serverassist.ids.projectId}:${serviceName}: service:`, err, service);
 
                 if (err || !service || !_.isArray(service))  { return next(); }    // Try the next option
@@ -674,25 +762,22 @@ lib.addRoutes = function(addRoute, db, callback) {
         translate.simple = function(req, res, match, result, callback) {
           const requestedStack  = result.upstream || 'prod';
           const projectId       = deref(req, 'serverassist.ids.projectId');
-          const query           = sg.extend(stackAlias(requestedStack), {projectId});
 
-          return stacksDb.find(query).toArray(function(err, stacks) {
+          return findStack(req, requestedStack, projectId, 'translate', function(err, stack) {
             if (err)  { return callback(err); }
 
-            if (!stacks || stacks.length === 0) {
+            if (!stack) {
               if (requestedStack !== 'prod') {
                 logChangeToUpstream(req, result.upstream, 'prod', `simpleTranslate-nostack-goto-prod`);
                 result.upstream = 'prod';
                 return translate.simple(req, res, match, result, callback);
               }
-              return callback('ENO_STACK');
 
-            } else if (stacks.length > 1) {
-              console.error(`Expected only one, got`, stacks, 'qeried:', query, requestedStack);
+              return callback('ENO_STACK');
             }
 
-            logChangeToUpstream(req, result.upstream, stacks[0].fqdn, `simpleTranslate-found-in-DB`);
-            result.upstream = stacks[0].fqdn;
+            logChangeToUpstream(req, result.upstream, stack.fqdn, `simpleTranslate-found-in-DB`);
+            result.upstream = stack.fqdn;
             return callback(null);
           });
         };
