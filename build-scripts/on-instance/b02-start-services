@@ -20,6 +20,7 @@ if [[ $stack == cluster ]]; then
   if [[ $service == web ]]; then
     (cd ~/dev/server-assist-server/hq      && pm2 start hq.js      -- --verbose --main)
     (cd ~/dev/server-assist-server/console && pm2 start console.js -- --verbose --main)
+    (cd ~/dev/server-assist-server/xapi    && pm2 start xapi.js    -- --verbose --xapi)
   fi
 
 else
@@ -30,6 +31,8 @@ else
   if [[ $service == netapp ]]; then
     (cd ~/dev/attr-man          && pm2 start attr-man.js  -- --verbose --main)
     (cd ~/dev/netlab-telemetry  && pm2 start telemetry.js -- --verbose --main --public)
+
+    ~/dev/serverassist/scripts/mount-react ~/dev/mario-sys-viewer
   fi
 fi
 

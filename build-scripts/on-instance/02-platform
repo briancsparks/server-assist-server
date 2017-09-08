@@ -23,6 +23,7 @@ if jsaws-build-block "install-repos" "Install repos"; then
     if [[ $service == netapp ]]; then
       (git clone git@github.com:briancsparks/attr-man           && cd attr-man          && npm install --production)
       (git clone git@github.com:briancsparks/netlab-telemetry   && cd netlab-telemetry  && npm install --production)
+      (git clone git@github.com:briancsparks/mario-sys-viewer)
     fi
   fi
 

@@ -50,6 +50,8 @@ domain_name="mobilewebassist.net"
 configuration="/tmp/configuration-$$.json"
 ra invoke `fn ~/dev 'serverassist/serverassist\.js'` configuration > $configuration
 
+cat $configuration | jq . > ~/configuration.json
+
 # ---------- Run via js-cluster/run-instance ----------
 cd "$(fd ~/dev/ js-cluster$)"
 ./build-scripts/run-instance --skip-start --as-pid="$as_pid" --project-id="sa" --namespace="serverassist" "$orig_args"
@@ -69,7 +71,7 @@ if [[ $service == web ]]; then
     echo $fqdn
 
     # Un-comment this line to see what the JSON looks like
-    #cat $configuration | jq -r ".result | .subStacks | .[\"$color-$stack\"] | .fqdns | .[\"$fqdn\"]"
+    cat $configuration | jq -r ".result | .subStacks | .[\"$color-$stack\"] | .fqdns | .[\"$fqdn\"]"
 
     # Get the project name
     project="$(cat $configuration | jq -r ".result | .subStacks | .[\"$color-$stack\"] | .fqdns | .[\"$fqdn\"] | .projectName")"
