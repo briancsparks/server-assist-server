@@ -142,7 +142,9 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
 
         // This has to be last, or noone else can handle any routes
         if (_.last(app_prjName.split('_')) === _.first(fqdn.split('.'))) {
-          addRoute(app_prjName, '/*', handlers[app_prjName]);
+          if (_.first(app_prjConfig.mount.split('/')) === 'sa') {
+            addRoute(app_prjName, '/*', handlers[app_prjName]);
+          }
         }
 
       });
