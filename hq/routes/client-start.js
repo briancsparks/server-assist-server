@@ -44,6 +44,7 @@ lib.addRoutes = function(addRoute, db, callback) {
     if (!clientId)                                                                        { return false; }
 
     if (clientId === '7B9qPWSIRh2EXElr4IQcLyrV3540klkqpjLpVtRuElSxyzWU5Tct0pNqA7cJDgnJ')  { return true; }    /* brian android */
+    if (clientId === '0InOUypKSp9fXKs62y6URhqmey6nYVMBOx5yd5r58ERwWRwOvZOt5m5GoyIEf0Z0')  { return true; }    /* brian android */
     if (clientId === '1czKyQ6BgQh701Xhk8Tgmqb4M5h04JAaocJJGDo6nvXQbyyM2vt4AAg9TKoIyzCS')  { return true; }    /* brian mac */
     if (clientId === 'TD0Gh10ramGuuECpnmNCYquZ4pmKnrR70nYEfhLfV0gQg4OkZSY5RcaGQqpNEAAz')  { return true; }    /* brian mac */
 
@@ -361,13 +362,15 @@ lib.addRoutes = function(addRoute, db, callback) {
                         (sa.partner && sa.partner.upstream) ||
                         (sa.project && sa.project.upstream));
 
+            const dbChanged = !!((sa.client && sa.client.upstream) || (sa.partner && sa.partner.upstream) || (sa.project && sa.project.upstream));
+
             logChangeToUpstream(req, origUpstream, result.upstream, `initial-DB-objects-change`);
 
             // Did the system set the upstream? If not, see if the client wants to be sent somewhere
             if (result.upstream === origUpstream /*didnt change*/ || (result.upstream === 'prod' && sg.isnt(origUpstream)) /*was never set*/) {
 
               // Did the user request a server?
-              if (requestedServer) {
+              if (requestedServer && !dbChanged) {
                 if (requestedServer === 'hqdev')         { result.upstream = 'test'; }
                 else if (requestedServer === 'hqqa')     { result.upstream = 'test'; }
                 else if (requestedServer === 'hqstg')    { result.upstream = 'staging'; }
