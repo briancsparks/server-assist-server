@@ -48,6 +48,11 @@ const main = function() {
     }, function(next) {
       // ---------- Run the server ----------
       const server = http.createServer((req, res) => {
+
+        // We are a long-poll server
+        req.setTimeout(0);
+        res.setTimeout(0);
+
         return sg.getBody(req, function() {
 
           const pathname      = urlLib.parse(req.url).pathname;
