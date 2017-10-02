@@ -371,9 +371,10 @@ lib.addRoutes = function(addRoute, db, callback) {
 
               // Did the user request a server?
               if (requestedServer && !dbChanged) {
-                if (requestedServer === 'hqdev')         { result.upstream = 'test'; }
-                else if (requestedServer === 'hqqa')     { result.upstream = 'test'; }
-                else if (requestedServer === 'hqstg')    { result.upstream = 'staging'; }
+                if (requestedServer === 'hqdev')            { result.upstream = 'test'; }
+                else if (requestedServer === 'hqqa')        { result.upstream = 'test'; }
+                else if (requestedServer === 'hqqanext')    { result.upstream = 'test_next'; }
+                else if (requestedServer === 'hqstg')       { result.upstream = 'staging'; }
                 else {
                   console.error(`Unknown rsvr=${requestedServer}; shoule be hqqa, hqdev, hqprod, etc.`);
                 }
