@@ -53,7 +53,7 @@ ra invoke `fn ~/dev 'serverassist/serverassist\.js'` configuration > $configurat
 cat $configuration | jq . > ~/configuration.json
 
 # ---------- Run via js-cluster/run-instance ----------
-cd "$(fd ~/dev/ js-cluster$)"
+cd "$(fd ~/dev/ '/js-cluster$')"
 ./build-scripts/run-instance --skip-start --as-pid="$as_pid" --project-id="sa" --namespace="serverassist" "$orig_args"
 
 # Get the IP, die if we cannot
