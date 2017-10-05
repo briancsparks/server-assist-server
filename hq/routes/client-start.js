@@ -81,14 +81,24 @@ lib.addRoutes = function(addRoute, db, callback) {
       return sg.kv(m, project.projectId, project);
     });
 
-    // Get the apps records from the dB
+    // Get the stack records from the DB
+    return stacksDb.find({color:{$exists:false}}, {_id:0}).toArray((err, stackRecords) => {
+      if (err)  { return sg.die(err, callback, 'clientStart-main.find-stacks'); }
+
+      var stacks = {};
+
+      _.each(stackRecords, stack => {
+        setOnn(stacks, [stack.projectId, stack.stack], stack);
+      });
+
+    // Get the apps records from the DB
     return appsDb.find({active:{$ne:false}}, {_id:0}).toArray((err, appRecords) => {
       if (err)  { return sg.die(err, callback, 'clientStart-main.find-apps'); }
 
       //
       // Make an apps list, indexed by appId
       //
-      // For any app that is multi-use ('*' for root of route), also add an app for 
+      // For any app that is multi-use ('*' for root of route), also add an app for
       // that projectId_appId.
       //
 
@@ -524,7 +534,7 @@ lib.addRoutes = function(addRoute, db, callback) {
 
           }, function(next) {
 
-            const upstream      = result.upstream;
+            const upstream      = result.fqdn;
             //const projectIds    = _.compact([req.serverassist.ids.baseProjectId, req.serverassist.ids.projectId]);
             const projectIds    = _.compact([req.serverassist.ids.projectId]);
 
@@ -656,7 +666,7 @@ lib.addRoutes = function(addRoute, db, callback) {
             });
 
           }], function() {
-            if (!stack) {
+            if (!stack && attempt) {
               console.log(`Failed to find stack from DB on ${attempt} attempt`, sg.inspect(query));
               return callback();
             }
@@ -674,7 +684,7 @@ lib.addRoutes = function(addRoute, db, callback) {
         const getServiceFromUpstream = function(req, upstream, projectId, serviceName, attempt, callback) {
 
           return findStack(req, upstream, projectId, attempt, (err, stack) => {
-            if (!sg.ok(err, stack)) { return callback(); }
+            if (!sg.ok(err, stack)) { return callback(err); }
 
             return getStackService(stack.color, stack.stack, serviceName, callback);
           });
@@ -699,7 +709,8 @@ lib.addRoutes = function(addRoute, db, callback) {
               return getServiceFromUpstream(req, result.upstream, req.serverassist.ids.projectId, serviceName, 'first', function(err, service) {
                 debugLog(req, `upstream: ${result.upstream} for ${clientId}, project: ${req.serverassist.ids.projectId}:${serviceName}: service:`, err, service);
 
-                if (err || !service || !_.isArray(service))  { return next(); }    // Try the next option
+                if (err)                                     { return callback(err); }
+                if (!service || !_.isArray(service))         { return next(); }    // Try the next option
                 if (service.length < 1)                      { return next(); }    // Try the next option
 
                 // Yes, it is up and running, use it.
@@ -721,7 +732,8 @@ lib.addRoutes = function(addRoute, db, callback) {
               return getServiceFromUpstream(req, result.upstream, req.serverassist.projectId, serviceName, 'last', function(err, service) {
                 debugLog(req, `fallback upstream: ${result.upstream} for ${clientId}, project: ${req.serverassist.ids.projectId}:${serviceName}: service:`, err, service);
 
-                if (err || !service || !_.isArray(service))  { return next(); }    // Try the next option
+                if (err)                                     { return callback(err); }
+                if (!service || !_.isArray(service))         { return next(); }    // Try the next option
                 if (service.length < 1)                      { return next(); }    // Try the next option
 
                 // Yes, it is up and running. Use it.
@@ -768,15 +780,30 @@ lib.addRoutes = function(addRoute, db, callback) {
          *
          *  This is a simple DB lookup -- the stack records in the DB know their FQDN. However
          *  this is an FQDN that might be cryptic and specific to us.
+         *
+         *  * Knows that projects might have a base project
+         *  * Uses the system-fallback project (sa), if the DB does not have an entry for the requested project
          */
-        translate.simple = function(req, res, match, result, callback) {
+        translate.simple = function(req, res, match, result, callback, fallbackProjectId) {
           const requestedStack  = result.upstream || 'prod';
+          const stackName       = result.upstream === 'prod' ? 'pub' : result.upstream;
           const projectId       = deref(req, 'serverassist.ids.projectId');
+          const baseProjectId   = deref(req, 'serverassist.ids.baseProjectId');
+          const stack_          = deref(stacks, [baseProjectId || projectId, stackName]) || deref(stacks, [fallbackProjectId, stackName]) || {};
+          const protocol        = stack_.useHttp ? 'http' : 'https';
 
-          return findStack(req, requestedStack, projectId, 'translate', function(err, stack) {
+          return findStack(req, requestedStack, fallbackProjectId || projectId, null, function(err, stack) {
             if (err)  { return callback(err); }
 
             if (!stack) {
+
+              // If the requested project is not up, use sa
+              if ((fallbackProjectId || projectId) !== 'sa') {
+                logChangeToUpstream(req, result.upstream, `${result.upstream}-sa`, `simpleTranslate-nostack-goto-sa`);
+                return translate.simple(req, res, match, result, callback, 'sa');
+              }
+
+              // If they did not request prod, but what they requested is not up, switch to prod
               if (requestedStack !== 'prod') {
                 logChangeToUpstream(req, result.upstream, 'prod', `simpleTranslate-nostack-goto-prod`);
                 result.upstream = 'prod';
@@ -786,8 +813,13 @@ lib.addRoutes = function(addRoute, db, callback) {
               return callback('ENO_STACK');
             }
 
-            logChangeToUpstream(req, result.upstream, stack.fqdn, `simpleTranslate-found-in-DB`);
-            result.upstream = stack.fqdn;
+            const newUpstream = `${protocol}://${stack.fqdn}/${projectId || fallbackProjectId}`;
+            logChangeToUpstream(req, result.upstream, newUpstream, `simpleTranslate-found-in-DB`);
+
+            result.upstream   = newUpstream;
+            result.fqdn       = stack.fqdn;
+            result.protocol   = protocol;
+
             return callback(null);
           });
         };
@@ -807,19 +839,28 @@ lib.addRoutes = function(addRoute, db, callback) {
 
             // Call the `simple` function to get our internal name
             return translate.simple(req, res, match, result, function(err) {
+              if (err)    { return callback(err); }
+
               const clientId  = deref(req, 'serverassist.ids.clientId') || 'nobody';
 
+              var   query = {
+                internalName  : result.fqdn || result.upstream,
+                projectId     : projectName
+              };
+
               // Look up the internal name in the DB to get the external name.
-              return onrampsDb.find({internalName: result.upstream}).limit(1).next(function(err, onramp) {
+              return onrampsDb.find(query).limit(1).next(function(err, onramp) {
                 if (err)    { console.error(err); return callback(err); }
 
                 debugLog(req, `translate(onramp): ${result.upstream} for ${clientId}, project: ${req.serverassist.ids.projectId} ->> ${onramp && onramp.externalName}`);
 
                 if (onramp) {
-                  logChangeToUpstream(req, result.upstream, onramp.externalName, `onramp`);
-                  result.upstream = onramp.externalName;
-                }
+                  const newUpstream = `${result.protocol}://${onramp.fqdn}/${projectName}`;
+                  logChangeToUpstream(req, result.upstream, newUpstream, `onramp`);
 
+                  result.upstream = newUpstream;
+                  result.fqdn     = onramp.fqdn;
+                }
                 return callback(err, onramp);
               });
             });
@@ -865,6 +906,7 @@ lib.addRoutes = function(addRoute, db, callback) {
 
         return next();
       }]);
+    });
     });
   });
 };
