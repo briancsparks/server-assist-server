@@ -1,4 +1,4 @@
 #!/bin/bash -e
 
-ln -s zz_packages/build-sa/ build-scripts
+ln -s zz_packages/build-sa build-scripts
 
