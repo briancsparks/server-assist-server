@@ -36,7 +36,7 @@ const main = function() {
   };
 
   var   params = {
-    port        : ARGV.port || 8188,
+    port        : ARGV.port || 8106,
     rawRoutes   : true,
     routes,
     addModRoutes,

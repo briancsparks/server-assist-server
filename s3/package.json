@@ -1,0 +1,14 @@
+{
+  "name": "server-assist-server/s3",
+  "version": "1.0.0",
+  "description": "",
+  "main": "s3.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "aws-sdk": "^2.131.0",
+    "serverassist": "^0.1.15",
+    "sgsg": "^0.9.32"
+  }
+}

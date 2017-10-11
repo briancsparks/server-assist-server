@@ -59,34 +59,46 @@ lib.addRoutes = function(addRoute, onStart, db /*, addRawRoute, callback */) {
    */
   const s3get = function(req, res, params_, splats, query) {
     var   result      = {};
-    const args        = serverassist.normalizeBody(req.bodyJson || {}, params_ || {}, query || {});
+    const args_       = sg.extend(req.bodyJson || {}, params_ || {}, query || {});
+    const args        = _.omit(args_, 'projectId,version'.split(','));
 
+    const start       = _.now();
     const Bucket      = argvExtract(args, 'bucket');
     const Key         = argvExtract(args, 'key');
+    const delay       = argvExtract(args, 'delay');
 
     if (!Bucket)      { return _400(req, res, 'Must provide Bucket'); }
     if (!Key)         { return _400(req, res, 'Must provide Key'); }
 
-    return sg.__run2({}, callback, [function(result, next, last, abort) {
+    return sg.__run2({}, [function(result, next, last, abort) {
 
       const params = sg.reduce(args, {Bucket, Key}, (m, value, key) => {
         return sg.kv(m, key, value);
       });
 
       return s3.getObject(params, (err, data) => {
-        console.log(err, _.keys(data));
+        //console.log(err, _.keys(data), _.omit(data, 'Body'), data.Body.length);
 
         if (data.ContentType === 'application/json') {
-          data.Body = sg.safeJSONParse(data.Body) || data.Body;
+          _.extend(result, sg.safeJSONParse(data.Body) || data.Body);
+          return next();
         }
-
-        _.extend(result, _.pick(data, 'Body,ETag,ContentType'.split(',')));
 
         return next();
       });
 
     }], function last(err, result) {
-      return _200(req, res, result);
+      if (sg.isnt(delay)) {
+        return doit();
+      }
+
+      /* othewise */
+      const elapsed = _.now() - start;
+      return sg.setTimeout(delay - elapsed, doit);
+
+      function doit() {
+        return _200(req, res, result);
+      }
     }, function abort(err, msg) {
       if (msg)  { return _404(req, res, msg); }
       return _400(err);
