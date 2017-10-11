@@ -75,7 +75,6 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
     _.each(stack.fqdns || {}, (serverConfig, fqdn) => {
       sg.setOn(servers, [fqdn, 'router'], Router());
 
-      var xapiUrlPrefixes = [];
       var xapiHandler;
       var handlers        = {};
 
@@ -101,17 +100,16 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
 
         // xapi
         if (appName === 'xapi') {
-          const xapiRec = r.db.appRecords.sa_xapi;
           //console.log(`  --configuring for ${appName}`);
 
           if (projectId === 'sa') {
             xapiHandler = handler;
           }
 
-          xapiUrlPrefixes = _.toArray(xapiRec.urlPrefixes);
-          _.each(xapiRec.urlPrefixes, urlPrefix => {
-            addRoute(app_prjName, `/${urlPrefix}/${appName}/${projectId}/v:version`, handler);
-            addRoute(app_prjName, `/${urlPrefix}/${appName}/${projectId}/v:version/*`, handler);
+          _.each(r.db.appRecords, appRecord => {
+            if (!appRecord.xapiPrefix || !r.db.appprjRecords[`${projectId}_${appRecord.appName}`]) { return; }
+            addRoute(app_prjName, `/${appRecord.xapiPrefix}/${appName}/${projectId}/v:version`, handler);
+            addRoute(app_prjName, `/${appRecord.xapiPrefix}/${appName}/${projectId}/v:version/*`, handler);
           });
 
           addRoute(app_prjName, `/${projectId}/${appName}`, handler);
@@ -126,9 +124,10 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
       // xapi
       if (xapiHandler) {
         const appName = 'xapi';
-        _.each(xapiUrlPrefixes, urlPrefix => {
-          addRoute(`sa_xapi`, `/${urlPrefix}/${appName}/v:version`, xapiHandler);
-          addRoute(`sa_xapi`, `/${urlPrefix}/${appName}/v:version/*`, xapiHandler);
+        _.each(r.db.appRecords, appRecord => {
+          if (!appRecord.xapiPrefix) { return; }
+          addRoute(`sa_xapi`, `/${appRecord.xapiPrefix}/${appName}/v:version`, xapiHandler);
+          addRoute(`sa_xapi`, `/${appRecord.xapiPrefix}/${appName}/v:version/*`, xapiHandler);
         });
 
         addRoute(`sa_xapi`, `/${appName}`, xapiHandler);

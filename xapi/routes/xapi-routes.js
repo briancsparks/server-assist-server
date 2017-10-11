@@ -58,11 +58,10 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
         if (!isOk)  {  return serverassist._403(req, res); }
 
         /* otherwise */
-        const serviceFinder = deref(serviceFinders, [projectName]) || setOnn(serviceFinders, projectName, serverassist.mkServiceFinder(projectName, projectId, "prod,or_test", r));
+        const serviceFinder = deref(serviceFinders, [projectName]) || setOnn(serviceFinders, projectName, serverassist.mkServiceFinder(projectName, null, "prod,or_test", r));
 
         const serviceName = _.compact([app_prjName, params.tname, params.version]).join('_');
         return serviceFinder.getOneServiceLocation(serviceName, (err, location) => {
-          //return redirectToService(req, res, serviceName, err, location, rewriteIsSplats && `/${splats.join('/')}`);
           return redirectToService(req, res, serviceName, err, location);
         });
       });
