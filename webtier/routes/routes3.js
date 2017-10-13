@@ -50,6 +50,31 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
   return configuration({}, {}, (err, r) => {
     if (err) { return sg.die(err, callback, 'addRoutesToServers.clusterConfig.configuration'); }
 
+    var handlers        = {};
+
+    var   projects = {},saProject;
+    const projectByDomainName = sg.reduce(r.db.projectRecords, {}, (m, project) => {
+      if (project.projectId === 'sa')   { saProject = project; }
+      if (project.uriBase)              { m = sg.kv(m, project.uriBase.split('/')[0], project); }
+      if (project.uriTestBase)          { m = sg.kv(m, project.uriTestBase.split('/')[0], project); }
+
+      projects[project.projectId] = project;
+      return m;
+    });
+    projectByDomainName['mobilewebassist.net'] = saProject;
+    projectByDomainName['mobiledevassist.net'] = saProject;
+
+    const appBySubdomain = sg.reduce(r.db.appRecords, {}, (m, app) => {
+      if (app.subdomain) { return sg.kv(m, app.subdomain.split('.')[0], app); }
+      return m;
+    });
+
+    const serviceLists = sg.reduce(r.db.projectRecords, {}, (m, project) => {
+      const serviceName = project.serviceName || project.projectName;
+      if (m[serviceName])   { return m; }
+      return sg.kv(m, serviceName, new ServiceList([serviceName, myColor, myStack].join('-'), utilIp));
+    });
+
     //console.error(sg.inspect(r), myColor, myStack);
 
     const mkHandler_ = function(app_prjName, fqdn) {
@@ -61,25 +86,62 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
        *  service; then uses `X-Accel-Redirect` to send Nginx there to retrieve the
        *  real response.
        */
+      var   [projectId, appName]  = app_prjName.split('_');
+      const domainName            = _.last(fqdn.split('.'), 2).join('.');
+      const domainProject         = projectByDomainName[domainName];
+
       const handler = function(req, res, params, splats) {
-        return serviceList.getOneService(app_prjName, (err, location) => {
-          return redirectToService(req, res, app_prjName, err, location);
+
+        return sg.__run2({}, [function(result, next, last) {
+
+          // First, try the more specific service name
+          const projectId   = params.projectId || domainProject.projectId || projectId;
+          const project     = projects[projectId] || {};
+          const serviceList = serviceLists[project.serviceName || ''];
+
+          if (!serviceList)   { return next(); }
+
+          return serviceList.getOneService(`${projectId}_${appName}`, (err, location) => {
+            if (sg.ok(err, location)) {
+              result.location = location;
+              return last(null, result);
+            }
+            return next();
+          });
+
+        }, function(result, next, last) {
+          return serviceList.getOneService(app_prjName, (err, location) => {
+            if (sg.ok(err, location)) {
+              result.location = location;
+              return last(null, result);
+            }
+            return next();
+          });
+
+        }], function last(err, result) {
+          return redirectToService(req, res, app_prjName, err, result.location);
         });
       };
 
-      return handler;
+      return (handlers[app_prjName] = handler);
     };
 
-    const stack = r.result.subStacks[`${myColor}-${myStack}`];
+    const stack         = r.result.subStacks[`${myColor}-${myStack}`];
+    var   projectNames  = {};
+    var   xapiHandler;
+    var   xapiHandlerFqdn;
+
+    const addFqdnRoute = function(name, route, handler, fqdn) {
+      console.log(`${sg.pad(fqdn, 35)} ${sg.lpad(route, 55)} ->> ${name}`);
+      servers[fqdn].router.addRoute(route, handler);
+    };
 
     _.each(stack.fqdns || {}, (serverConfig, fqdn) => {
       sg.setOn(servers, [fqdn, 'router'], Router());
 
-      var xapiHandler;
-      var handlers        = {};
-
       const mkHandler = function(name) {
-        return (handlers[name] = mkHandler_(name, fqdn));
+        //return (handlers[name] = mkHandler_(name, fqdn));
+        return mkHandler_(name, fqdn);
       };
 
       const addRoute = function(name, route, handler) {
@@ -89,6 +151,8 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
 
       _.each(serverConfig.app_prj || {}, (app_prjConfig, app_prjName) => {
         const [projectId, appName] = app_prjName.split('_');
+
+        projectNames[projectId] = projectId;
 
         //console.log(`--configuring ${fqdn}, ${app_prjName}, /${app_prjConfig.route}`);
         const handler = mkHandler(app_prjName);
@@ -100,10 +164,11 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
 
         // xapi
         if (appName === 'xapi') {
-          //console.log(`  --configuring for ${appName}`);
+          //console.log(`    --configuring for ${projectId} ${appName}`);
 
           if (projectId === 'sa') {
-            xapiHandler = handler;
+            xapiHandler     = handler;
+            xapiHandlerFqdn = fqdn;
           }
 
           _.each(r.db.appRecords, appRecord => {
@@ -118,31 +183,41 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
         }
 
       });
+    });
 
-      // ---------- Special processing for core sa apps without project ----------
+    // ---------- Special processing for core sa apps without project ----------
 
-      // xapi
-      if (xapiHandler) {
-        const appName = 'xapi';
-        _.each(r.db.appRecords, appRecord => {
-          if (!appRecord.xapiPrefix) { return; }
-          addRoute(`sa_xapi`, `/${appRecord.xapiPrefix}/${appName}/v:version`, xapiHandler);
-          addRoute(`sa_xapi`, `/${appRecord.xapiPrefix}/${appName}/v:version/*`, xapiHandler);
+    // xapi
+    if (xapiHandler) {
+
+      //console.log(`--configuring ---------- ${xapiHandlerFqdn} xapi ----------`);
+      _.each(r.db.appRecords, appRecord => {
+        if (!appRecord.xapiPrefix) { return; }
+
+        _.each(projectNames, projectName => {
+          addFqdnRoute(`sa_xapi`, `/${appRecord.xapiPrefix}/xapi/v:version/:projectId(${projectName})`, xapiHandler, xapiHandlerFqdn);
+          addFqdnRoute(`sa_xapi`, `/${appRecord.xapiPrefix}/xapi/v:version/:projectId(${projectName})/*`, xapiHandler, xapiHandlerFqdn);
         });
 
-        addRoute(`sa_xapi`, `/${appName}`, xapiHandler);
-        addRoute(`sa_xapi`, `/${appName}/*`, xapiHandler);
-      }
+        addFqdnRoute(`sa_xapi`, `/${appRecord.xapiPrefix}/xapi/v:version`, xapiHandler, xapiHandlerFqdn);
+        addFqdnRoute(`sa_xapi`, `/${appRecord.xapiPrefix}/xapi/v:version/*`, xapiHandler, xapiHandlerFqdn);
+      });
 
+      addFqdnRoute(`sa_xapi`, `/xapi`, xapiHandler, xapiHandlerFqdn);
+      addFqdnRoute(`sa_xapi`, `/xapi/*`, xapiHandler, xapiHandlerFqdn);
+    }
+
+    _.each(stack.fqdns || {}, (serverConfig, fqdn) => {
       // ---------- More special processing for core sa apps ----------
 
       // The app gets to handle the root path, if it owns the subdomain (sa_console for console.mobilewebassist.net)
       _.each(serverConfig.app_prj || {}, (app_prjConfig, app_prjName) => {
+        //console.log(`--configuring again ${fqdn}, ${app_prjName}, /${app_prjConfig.route}`);
 
         // This has to be last, or noone else can handle any routes
         if (_.last(app_prjName.split('_')) === _.first(fqdn.split('.'))) {
           if (_.first(app_prjConfig.mount.split('/')) === 'sa') {
-            addRoute(app_prjName, '/*', handlers[app_prjName]);
+            addFqdnRoute(app_prjName, '/*', handlers[app_prjName], fqdn);
           }
         }
 
