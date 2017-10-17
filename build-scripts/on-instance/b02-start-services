@@ -36,5 +36,11 @@ else
 
 #    ~/dev/serverassist/scripts/mount-react ~/dev/mario-sys-viewer
   fi
+
+  if [[ $service == netapp ]]; then
+    (cd ~/dev/Netlab_Telemetry/sa-watchdog      && pm2 show ntl-watchdog ||   pm2 start watchdog.js   -- --verbose --main)
+    (cd ~/dev/server-assist-server/sa-watchdog  && pm2 show sa-watchdog  ||   pm2 start watchdog.js   -- --verbose --main)
+  fi
+
 fi
 

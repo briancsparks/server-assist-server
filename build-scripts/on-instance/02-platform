@@ -9,11 +9,12 @@ if jsaws-build-block "install-repos" "Install repos"; then
   if ! [[ -d ${HOME}/dev/serverassist ]]; then
     mkdir -p ${HOME}/dev && cd $_
 
-    (git clone git@github.com:briancsparks/serverassist.git && cd serverassist &&                          npm install --production)
     (git clone git@github.com:briancsparks/js-cluster.git   && cd js-cluster   &&                          npm install --production)
+    (git clone git@github.com:briancsparks/serverassist.git && cd serverassist &&                          npm install --production)
+
+    (git clone git@github.com:briancsparks/server-assist-server.git)
 
     if [[ $service == web ]]; then
-      (git clone git@github.com:briancsparks/server-assist-server.git)
 
       (cd server-assist-server          && npm install --production)
       (cd server-assist-server/webtier  && npm install --production)
@@ -21,13 +22,24 @@ if jsaws-build-block "install-repos" "Install repos"; then
     fi
 
     if [[ $service == netapp ]]; then
-      (git clone git@github.com:briancsparks/server-assist-server.git       && cd server-assist-server/s3   && npm install --production)
+      (cd server-assist-server/s3       && npm install --production)
 
       (git clone git@github.com:briancsparks/attr-man                       && cd attr-man          && npm install --production)
 #      (git clone git@github.com:briancsparks/netlab-telemetry               && cd netlab-telemetry  && npm install --production)
       (git clone git@github.azc.ext.hp.com:MobileApps/Netlab_Telemetry      && cd Netlab_Telemetry  && npm install --production)
       (git clone git@github.com:briancsparks/mario-sys-viewer)
     fi
+
+    if [[ $service == watchdog ]]; then
+      (git clone git@github.azc.ext.hp.com:MobileApps/Netlab_Telemetry      && cd Netlab_Telemetry/sa-watchdog  && npm install --production)
+    fi
+
+    if [[ $service == admin ]]; then
+      (git clone git@github.com:briancsparks/js-aws       && cd js-aws            && npm install)
+      (git clone git@github.com:IPGPTP/mario-js           && cd mario-js          && npm install)
+      (git clone git@github.com:briancsparks/sg           && cd sg                && npm install)
+    fi
+
   fi
 
   jsaws-build-block "install-repos" "done"
