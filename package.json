@@ -1,6 +1,6 @@
 {
   "name": "server-assist-server",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "",
   "main": "server-assist-server.js",
   "scripts": {
