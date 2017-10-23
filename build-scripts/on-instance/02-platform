@@ -31,7 +31,7 @@ if jsaws-build-block "install-repos" "Install repos"; then
     fi
 
     if [[ $service == watchdog ]]; then
-      (cd server-assist-server/sa-watchdog    && cd server-assist-server/sa-watchdog       && npm install --production)
+      (cd server-assist-server/sa-watchdog       && npm install --production)
 
       (git clone git@github.azc.ext.hp.com:MobileApps/Netlab_Telemetry      && cd Netlab_Telemetry/sa-watchdog  && npm install --production)
     fi

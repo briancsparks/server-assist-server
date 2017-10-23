@@ -26,9 +26,11 @@ cpit() {
   the_filename="$(basename $the_pathname)"
   the_dir="$(dirname $the_pathname)"
 
+  cert_work_dir="$(pull-secret --project="$project" $the_filename | egrep '^certdir:' | head -1 | cut -d' ' -f2)"
+
   # The only tricky thing is to put it into scotty's user area, or into a root dir
-  if pull-secret --project="$project" $the_filename; then
-    scpix ~/stmp/$the_filename "$ip:~/" && rm ~/stmp/$the_filename
+  if [[ -d $cert_work_dir ]]; then
+    scpix $cert_work_dir/$the_filename "$ip:~/" && rm $cert_work_dir/$the_filename
 
     if [[ $the_dir =~ scotty ]]; then
       sshix $ip "mkdir -p $the_dir && cd $the_dir && mv $HOME/$the_filename ./ && chmod 0400 $the_filename"

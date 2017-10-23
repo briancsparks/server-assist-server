@@ -23,6 +23,11 @@ if [[ $stack == cluster ]]; then
     (cd ~/dev/server-assist-server/xapi     && pm2 show xapi ||               pm2 start xapi.js    -- --verbose --xapi)
   fi
 
+  if [[ $service == watchdog ]]; then
+    (cd ~/dev/Netlab_Telemetry/sa-watchdog      && pm2 show ntl-watchdog ||   pm2 start watchdog.js --name ntl-watchdog   -- --verbose --main)
+    (cd ~/dev/server-assist-server/sa-watchdog  && pm2 show sa-watchdog  ||   pm2 start watchdog.js --name sa-watchdog    -- --verbose --main)
+  fi
+
 else
 
   # We are not on the cluster stack, start normal stuff
@@ -35,11 +40,6 @@ else
     (cd ~/dev/server-assist-server/s3       && pm2 show s3               ||   pm2 start s3.js                 -- --verbose --public)
 
 #    ~/dev/serverassist/scripts/mount-react ~/dev/mario-sys-viewer
-  fi
-
-  if [[ $service == watchdog ]]; then
-    (cd ~/dev/Netlab_Telemetry/sa-watchdog      && pm2 show ntl-watchdog ||   pm2 start watchdog.js   -- --verbose --main)
-    (cd ~/dev/server-assist-server/sa-watchdog  && pm2 show sa-watchdog  ||   pm2 start watchdog.js   -- --verbose --main)
   fi
 
 fi
