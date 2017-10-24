@@ -36,7 +36,7 @@ else
   if [[ $service == netapp ]]; then
     #(cd ~/dev/attr-man                      && pm2 show attr-man ||           pm2 start attr-man.js           -- --verbose --main)
     #(cd ~/dev/netlab-telemetry              && pm2 show telemetry ||          pm2 start telemetry.js          -- --verbose --main --public)
-    (cd ~/dev/Netlab_Telemetry              && pm2 show netlab-telemetry ||   pm2 start netlab-telemetry.js   -- --verbose --main --public)
+    (cd ~/dev/Netlab_Telemetry              && pm2 show netlab-telemetry ||   pm2 start netlab-telemetry.js   -- --verbose --main --public --xapi)
     (cd ~/dev/server-assist-server/s3       && pm2 show s3               ||   pm2 start s3.js                 -- --verbose --public)
 
 #    ~/dev/serverassist/scripts/mount-react ~/dev/mario-sys-viewer
