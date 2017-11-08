@@ -112,6 +112,11 @@ lib.addRoutes = function(addRoute, onStart, db /*, addRawRoute, callback */) {
 
       return s3.getObject(params, (err, data) => {
         if (err) {
+          if (err.code === 'NoSuchKey') {
+            console.log(`${err.code}: Bucket: ${Bucket}, Key: ${Key}, delay: ${delay}`);
+            console.log("argv: ", argv);
+          }
+
           console.log(_.pick(err, 'message,code,statusCode'.split(',')));
           if (err.statusCode === 404)   { return _404(req, res, err.code || 'Not Found'); }
           return _400(req, res, err);
@@ -194,6 +199,23 @@ lib.addRoutes = function(addRoute, onStart, db /*, addRawRoute, callback */) {
   };
 
   //-------------------------------------------------------------------------------------------------
+  /**
+   *  Handles s3get with path-params, instead of query parameters
+   *
+   *    /s3get
+   *
+   */
+  const s3getWithParams = function(req, res, params_, splats, query) {
+    var   argv        = _extend(req.bodyJson || {}, params_ || {}, query || {}, {splats});
+    const projectId   = argvGet(argv, 'project-id,projectId');
+
+    const app_prjName = _.compact([projectId, myAppName /*s3*/]).join('_');
+
+    argv.Key = [argv.Key, splats].join('/');
+    return sendS3File(req, res, argv, app_prjName);
+  };
+
+  //-------------------------------------------------------------------------------------------------
 
 
   // ------------------------------------------------------------------------------------------------
@@ -267,10 +289,12 @@ lib.addRoutes = function(addRoute, onStart, db /*, addRawRoute, callback */) {
       const [projectId, appName]  = app_prjName.split('_');
       const myMount               = deref(app_prj, [myStack, myColor, 'mount']) || '';
 
-      addRoute(`/:projectId(${projectId})/api/v:version/${appName}`, `/get`,                  s3get, app_prjName, true);
-      //addRoute(`/:projectId(${projectId})/api/v:version/${appName}`, `/get/:Bucket/:Key`,     s3get, app_prjName, true);      // Does not work right, yet
-      //addRoute(`/:projectId(${projectId})/api/v:version/${appName}`, `/get/:Bucket/:Key/*`,   s3get, app_prjName, true);      // Does not work right, yet
-      addRoute(`/:projectId(${projectId})/api/v:version/${appName}`, `/get/*`,                s3get, app_prjName, true);
+
+      addRoute(`/:projectId(${projectId})/api/v:version/${appName}`, `/get`,                              s3get, app_prjName, true);
+      addRoute(`/:projectId(${projectId})/api/v:version/${appName}`, `/get/*`,                            s3get, app_prjName, true);
+
+      addRoute(`/:projectId(${projectId})/api/v:version/${appName}`, `/delayGet/:delay/:Bucket/:Key`,     s3getWithParams, app_prjName, true);
+      addRoute(`/:projectId(${projectId})/api/v:version/${appName}`, `/delayGet/:delay/:Bucket/:Key/*`,   s3getWithParams, app_prjName, true);
 
       // Add startup notification handler for S3
       onStart.push(function(port, myIp) {
