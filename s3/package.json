@@ -9,6 +9,6 @@
   "dependencies": {
     "aws-sdk": "^2.131.0",
     "serverassist": "^0.1.15",
-    "sgsg": "^0.9.32"
+    "sgsg": "^0.9.38"
   }
 }

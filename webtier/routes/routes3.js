@@ -91,7 +91,6 @@ lib.addRoutesToServers = function(db, servers, config, callback) {
       const domainProject         = projectByDomainName[domainName];
 
       const handler = function(req, res, params, splats) {
-
         return sg.__run2({}, [function(result, next, last) {
 
           // First, try the more specific service name

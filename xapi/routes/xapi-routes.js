@@ -254,6 +254,34 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
       return sg.kv(m, appprj.appProjectId, appprj);
     });
 
+    // ------------------------------------------------------------------------
+    //  Find the running state for each stack type. I.e. "In the test stack,
+    //  which instances/colors are main, next, etc?
+    //
+    //   ntl:
+    //    { pub:
+    //       { prev:
+    //          { projectServicePrefix: 'netlab',
+    //            color: 'green',
+    //            projectId: 'ntl',
+    //            stack: 'pub',
+    //            state: 'prev',
+    //            fqdn: 'green-pub.mobilewebassist.net',
+    //            account: 'pub',
+    //            baseProjectServicePrefix: 'serverassist' },
+    //         main:
+    //          { projectServicePrefix: 'netlab',
+    //            color: 'blue',
+    //            projectId: 'ntl',
+    //            stack: 'pub',
+    //            state: 'main',
+    //            fqdn: 'blue-pub.mobilewebassist.net',
+    //            account: 'pub',
+    //            baseProjectServicePrefix: 'serverassist' } },
+    //      cluster:
+    //       { main:
+    //
+
     // Find the state of the instances (which colors are main, for example)
     _.each(r.db.instanceRecords, (instance) => {
       const project = r.db.projectRecords[instance.projectId] || {};
@@ -288,7 +316,7 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
         });
       }
     });
-    //console.log(sg.inspect(projectRunningStates));
+    // console.log('-------------------------------', sg.inspect(projectRunningStates));
 
     // Update the global vars all at once
     projectByDomainName = projectByDomainName_;

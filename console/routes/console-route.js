@@ -19,6 +19,7 @@ const myColor                 = serverassist.myColor();
 const myStack                 = serverassist.myStack();
 const utilIp                  = serverassist.utilIp();
 const ServiceList             = clusterLib.ServiceList;
+const mkServiceFinder2        = serverassist.mkServiceFinder2ForStack;
 
 
 const appId                   = 'sa_console';
@@ -47,11 +48,20 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
   var   r;
   var   systemServiceInstances  = {};
   var   serviceFinders          = {};
+  var   stackServiceFinders     = {};
+
+  const getServiceFinder = function(stack, serviceId) {
+    const serviceFinders = stackServiceFinders;
+
+    serviceFinders[stack]              = serviceFinders[stack]              || {};
+    serviceFinders[stack][serviceId]   = serviceFinders[stack][serviceId]   || mkServiceFinder2(serviceId, stack);
+
+    return serviceFinders[stack][serviceId];
+  };
 
   const mkHandler = function(kind, options_) {
     const options         = options_ || {};
-    const rewriteIsSplats = options.rewriteIsSplats || false;
-
+    var   rewriteIsSplats = options.rewriteIsSplats || false;
     return function(req, res, params, splats, query, match) {
 
       // Nginx might be configured to allow client certs 'optionally' -- however, they are not optional
@@ -59,7 +69,7 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
       if (!clientVerify)                                      { return serverassist._403(req, res); }
       if (clientVerify !== 'SUCCESS')                         { return serverassist._403(req, res); }
 
-      const subject         = req.headers['x-client-s-dn'];
+      const subject         = req.headers['x-client-s-dn'] || '';
       const subjDn          = sg.parseOn2Chars(subject, '/', '=');
 
       if (!subjDn.CN)                                         { return serverassist._403(req, res); }
@@ -73,6 +83,8 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
 
         var { project, app, version }  = params;
         var projectId         = project;
+
+        version = version || 1;
 
         // Make sure we have a project
         if (!projectId) {
@@ -92,16 +104,70 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
 
         if (!projectId)                                         { return serverassist._403(req, res); }
 
+        // Build the key (beacon) for the service finder (like ntl_console_jenkins_1)
         const app_prjName = _.compact([projectId, kind, app, version]).join('_');
         const projectName = 'serverassist';
 
         // ---------- Get the service finder ----------
-        const systemServiceInstances_ = _.toArray(systemServiceInstances[projectId].all);
-        const serviceFinder = deref(serviceFinders, [projectName]) ||  serverassist.getServiceFinder(projectName, systemServiceInstances_);
+        const systemServiceInstances_ = _.toArray((systemServiceInstances[projectId] || {}).all || {});
+        var   serviceFinder = deref(serviceFinders, [projectName]) ||  serverassist.getServiceFinder(projectName, systemServiceInstances_);
         setOnn(serviceFinders, [projectName], serviceFinder);
 
-        return serviceFinder.getOneServiceLocation(app_prjName, (err, location) => {
-          return redirectToService(req, res, app_prjName, err, location, rewriteIsSplats && `/${splats.join('/')}`);
+        var location, serviceId;
+        sg.__run([function(next) {
+
+          // Getting the service finder the old way
+          return serviceFinder.getOneServiceLocation(app_prjName, (err, location_) => {
+            if (sg.ok(err, location_)) {
+              location = location_;
+            }
+
+            return next();
+          });
+
+        // ---------- Get the service finder the new way, like xapi does ----------
+        }, function(next) {
+          if (location)   { return next(); }
+
+          // ----- Try the cluster stack for the project -----
+
+          // Get the serviceId (name) -- like 'serverassist' or 'netlab' -- what is used in Redis
+          if (!(serviceId       = deref(r.db, ['projectRecords', projectId, 'serviceName'])))     { return next(); }
+          if (!(serviceFinder   = getServiceFinder('cluster', serviceId)))                        { return next(); }
+
+          return serviceFinder.getOneServiceLocation(app_prjName, (err, location_) => {
+            if (sg.ok(err, location_)) {
+              location = location_;
+              rewriteIsSplats = false;
+            }
+
+            return next();
+          });
+
+        }, function(next) {
+          if (location)   { return next(); }
+
+          // ----- Try the sa stack for the project -----
+
+          // Get the serviceId (name) -- 'serverassist' here
+          if (!(serviceId     = deref(r.db, ['projectRecords', 'sa', 'serviceName'])))          { return next(); }
+          if (!(serviceFinder = getServiceFinder('cluster', serviceId)))                        { return next(); }
+
+          return serviceFinder.getOneServiceLocation(app_prjName, (err, location_) => {
+            if (sg.ok(err, location_)) {
+              location = location_;
+              rewriteIsSplats = false;
+            }
+
+            return next();
+          });
+
+        }], function() {
+          if (rewriteIsSplats) {
+            return redirectToService(req, res, app_prjName, err, location, rewriteIsSplats && `/${splats.join('/')}`);
+          } else {
+            return redirectToService(req, res, app_prjName, err, location);
+          }
         });
       });
     };
