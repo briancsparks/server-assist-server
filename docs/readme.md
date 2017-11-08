@@ -101,12 +101,12 @@ For one blue cluster server:
 
 For both servers, green, at test:
 ```
-(cd ~/dev/server-assist-server/ && ./build-scripts/run-instance --instance-type=t2.large --service=web --stack=test --color=green) & (cd ~/dev/server-assist-server/ && ./build-scripts/run-instance --instance-type=t2.large --service=netapp --stack=test --color=green) & jobs; wait
+(cd ~/dev/server-assist-server/ && ./build-scripts/run-instance --instance-type=t2.large --service=web --stack=test --color=green) && (cd ~/dev/server-assist-server/ && ./build-scripts/run-instance --instance-type=t2.large --service=netapp --stack=test --color=green)
 ```
 
 For both servers, blue, at test:
 ```
-(cd ~/dev/server-assist-server/ && ./build-scripts/run-instance --instance-type=t2.large --service=web --stack=test --color=blue) & (cd ~/dev/server-assist-server/ && ./build-scripts/run-instance --instance-type=t2.large --service=netapp --stack=test --color=blue) & jobs; wait
+(cd ~/dev/server-assist-server/ && ./build-scripts/run-instance --instance-type=t2.large --service=web --stack=test --color=blue) && (cd ~/dev/server-assist-server/ && ./build-scripts/run-instance --instance-type=t2.large --service=netapp --stack=test --color=blue)
 ```
 
 ## For Mario (non-sa):
@@ -135,3 +135,19 @@ jobs; wait
 jobs; wait
 
 ```
+
+# To Build A New Server Type
+
+`server-assist-server's build-instance` needs to be aware of the new service. Follow what was done for `watchdog`.
+
+* Provides `--key`, but you can just provide this yourself.
+* Provides the b and d part of the IP address, but you can just provide `--ip`.
+* Change `server-assist-server 02-platform` to clone and install whatever you need
+* Change `server-assist-server b02-start-services` to start your stuff (pm2)
+
+You can always use build-instance with `--skip-ami` and `--no-terminate`, using `--service=netapp`
+
+(cd ~/dev/server-assist-server/ && ./build-scripts/build-instance --color=teal --stack=cluster --skip-ami --no-terminate --service=netapp --ip=10.13.2.90 )
+
+
+
