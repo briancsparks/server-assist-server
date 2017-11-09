@@ -85,22 +85,7 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
         var serviceIdMsg  = serviceId;
 
         // Which stack?
-        var   requestedStack = 'pub';
-        var   requestedState = 'main';
-
-        if (all.rsvr) {
-
-          if (all.rsvr === 'stg') {
-            all.rsvr = 'prodnext';
-          }
-
-          if (all.rsvr.startsWith('qa'))            { requestedStack = 'test'; }
-          else if (all.rsvr.startsWith('test'))     { requestedStack = 'test'; }
-          else if (all.rsvr.startsWith('pub'))      { requestedStack = 'pub'; }
-          else if (all.rsvr.startsWith('prod'))     { requestedStack = 'pub'; }
-
-          if (all.rsvr.match(/next$/i))             { requestedState = 'next'; }
-        }
+        const [ requestedStack, requestedState ] = serverassist.decodeRsvr(all.rsvr);
 
         const runningState  = deref(projectRunningStates, [projectId, requestedStack, requestedState]);
 
