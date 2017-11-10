@@ -12,6 +12,7 @@ const AWS                     = require('aws-sdk');
 const ARGV                    = sg.ARGV();
 const verbose                 = sg.verbose;
 const setOnn                  = sg.setOnn;
+const setOnna                 = sg.setOnna;
 const deref                   = sg.deref;
 const argvGet                 = sg.argvGet;
 const argvExtract             = sg.argvExtract;
@@ -75,6 +76,13 @@ lib.addRoutes = function(addRoute, onStart, db /*, addRawRoute, callback */) {
    *  * Parses the S3 object as JSON if it has the right content-type; returns as JSON.
    *  * Otherwise, returns as the S3 content-type
    *
+   *  Input parameters:
+   *
+   *  bucket  -- the S3 bucket name.
+   *  key     -- the S3 key name.
+   *  delay   -- optional.  This HTTP request should take at least `delay` msec to complete.
+   *             Note: the transfer from S3 takes some time, so we may not truly delay at all.
+   *
    */
   const sendS3File = function(req, res, argv, app_prjName) {
     const projectId   = argvGet(argv, 'project-id,projectId');
@@ -97,12 +105,16 @@ lib.addRoutes = function(addRoute, onStart, db /*, addRawRoute, callback */) {
     }) || false;
 
     if (allow) {
-      verbose(2, {allowingRule});
+      verbose(3, {allowingRule});
     } else {
-      verbose(2, {allow}, {allowRules});
+      verbose(3, {allow}, {allowRules});
     }
 
     if (!allow)       { return _403(req, res, `Access denied to ${Bucket}/${Key}`); }
+
+    if (delay) {
+      setOnna(res, 'serverassist.msg', '(delay: '+delay+'ms)');
+    }
 
     return sg.__run2({}, [function(result, next, last, abort) {
 
@@ -122,8 +134,6 @@ lib.addRoutes = function(addRoute, onStart, db /*, addRawRoute, callback */) {
           return _400(req, res, err);
         }
 
-        //console.log(err, _.keys(data), _.omit(data, 'Body'), data.Body.length, typeof data.Body);
-
         // If its JSON, return as such
         if (data.ContentType === 'application/json') {
           _.extend(result, sg.safeJSONParse(data.Body) || data.Body);
@@ -135,9 +145,20 @@ lib.addRoutes = function(addRoute, onStart, db /*, addRawRoute, callback */) {
           return doit();
         }
 
-        /* othewise */
         const elapsed = _.now() - start;
-        return sg.setTimeout(delay - elapsed, doit);
+        const stall   = delay - elapsed;
+        if (stall <= 0) {
+          return doit();
+        }
+
+        /* othewise */
+        if (stall >= 2000) {
+          console.log('Delaying ('+stall+'msec) final delivery of '+req.url);
+        }
+
+        return sg.setTimeout(stall, function() {
+          return doit();
+        });
 
         function doit() {
           res.writeHead(200, {
@@ -156,6 +177,8 @@ lib.addRoutes = function(addRoute, onStart, db /*, addRawRoute, callback */) {
 
       /* othewise */
       const elapsed = _.now() - start;
+
+      console.log('Delaying '+(delay-elapsed));
       return sg.setTimeout(delay - elapsed, doit);
 
       function doit() {
