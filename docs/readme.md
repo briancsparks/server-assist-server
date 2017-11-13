@@ -60,7 +60,7 @@ Build with the basic options, make an AMI
 You probably want to build both the web and netapp instance types:
 
 ```
-(cd ~/dev/server-assist-server/ && ./build-scripts/build-instance --stack=cluster --color=teal --service=web) & (cd ~/dev/server-assist-server/ && ./build-scripts/build-instance --stack=cluster --color=teal --service=netapp) & jobs; wait
+(cd ~/dev/server-assist-server/ && ./build-scripts/build-instance --stack=cluster --color=teal --service=web) && (cd ~/dev/server-assist-server/ && ./build-scripts/build-instance --stack=cluster --color=teal --service=netapp) & jobs; wait
 ```
 
 Build all three (js-cluster plus both web and netap)
