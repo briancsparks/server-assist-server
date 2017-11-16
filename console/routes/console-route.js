@@ -21,6 +21,9 @@ const utilIp                  = serverassist.utilIp();
 const ServiceList             = clusterLib.ServiceList;
 const mkServiceFinder2        = serverassist.mkServiceFinder2ForStack;
 
+var   defServiceName          = 'ntl_console_clusterboard_1';
+var   defPrefix               = '/ntl/clusterboard'
+
 
 const appId                   = 'sa_console';
 const mount                   = '*';
@@ -115,7 +118,7 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
 
         var location, serviceId;
         sg.__run([function(next) {
-
+          if (app_prjName === defServiceName)   { return next(); }
           // Getting the service finder the old way
           return serviceFinder.getOneServiceLocation(app_prjName, (err, location_) => {
             if (sg.ok(err, location_)) {
@@ -127,7 +130,8 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
 
         // ---------- Get the service finder the new way, like xapi does ----------
         }, function(next) {
-          if (location)   { return next(); }
+          if (app_prjName === defServiceName)   { return next(); }
+          if (location)                         { return next(); }
 
           // ----- Try the cluster stack for the project -----
 
@@ -145,6 +149,7 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
           });
 
         }, function(next) {
+          if (app_prjName === defServiceName)   { return next(); }
           if (location)   { return next(); }
 
           // ----- Try the sa stack for the project -----
@@ -157,6 +162,26 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
             if (sg.ok(err, location_)) {
               location = location_;
               rewriteIsSplats = false;
+            }
+
+            return next();
+          });
+
+        }, function(next) {
+          if (location)   { return next(); }
+
+          // ----- Try the default stack  -----
+
+          // Get the serviceId (name) -- 'serverassist' here
+          if (!(serviceId     = deref(r.db, ['projectRecords', 'sa', 'serviceName'])))          { return next(); }
+          if (!(serviceFinder = getServiceFinder('cluster', 'serverassist')))                        { return next(); }
+
+          return serviceFinder.getOneServiceLocation('ntl_console_clusterboard_1', (err, location) => {
+            if (sg.ok(err, location)) {
+              if (url.href.startsWith(defPrefix)) {
+                return redirectToService(req, res, app_prjName, err, location, url.href.substring(defPrefix.length));
+              }
+              return redirectToService(req, res, app_prjName, err, location, url.href);
             }
 
             return next();
