@@ -7,13 +7,13 @@ const _                       = sg._;
 const urlLib                  = require('url');
 const qsLib                   = require('querystring');
 const serverassist            = sg.include('serverassist') || require('serverassist');
+const util                    = require('util');
 
 const deref                   = sg.deref;
 const setOnn                  = sg.setOnn;
 const isClientCertOk          = serverassist.isClientCertOk;
 const myColor                 = serverassist.myColor();
 const myStack                 = serverassist.myStack();
-const registerAsServiceApp    = serverassist.registerAsServiceApp;
 const registerAsService       = serverassist.registerAsService;
 const redirectToService       = serverassist.redirectToService;
 const mkServiceFinder2        = serverassist.mkServiceFinder2;
@@ -34,14 +34,12 @@ const appRecord = {
   subdomain           : 'console.'
 };
 
-const xapiPrefixesX    = 's3,telemetry,attrstream'.split(',').map(x => `:tname(${x})`);
-
 var   lib             = {};
 
 lib.addRoutes = function(addRoute, onStart, db, callback) {
   var   r;
 
-  var   projectByDomainName, appBySubdomain, xapiPrefixes, app_prjs;
+  var   projectByDomainName, appBySubdomain, xapiPrefixes, app_prjs, knownProjectIds;
 
   var   projectRunningStates = {};
 
@@ -77,28 +75,34 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
         if (err)    { console.error(err); return serverassist._403(req, res); }
         if (!isOk)  {  return serverassist._403(req, res); }
 
-        const all         = sg._extend(params || {}, query_ || {});
-        const query       = _.omit(query_, 'rsvr');
+        // Figure out the parameters for the request (as opposed to what was
+        // setup when calling mkHandler)
+        const reqProjectId            = params.projectId || projectId;
+        const reqProjectServicePrefix = (knownProjectIds[reqProjectId] || {}).serviceNamespace || projectServicePrefix;
+        const reqApp_prjName          = app_prjName.replace(projectId, reqProjectId);
+
+        const all           = sg._extend(params || {}, query_ || {});
+        const query         = _.omit(query_, 'rsvr');
 
         // The id of the service (like mxp_xapi_s3_1) -- (aname === s3, in this case)
-        const serviceId   = _.compact([app_prjName, params.aname, params.version]).join('_');
-        var serviceIdMsg  = serviceId;
+        const serviceId     = _.compact([reqApp_prjName, params.aname, params.version]).join('_');
+        var serviceIdMsg    = serviceId;
 
         // Which stack?
         const [ requestedStack, requestedState ] = serverassist.decodeRsvr(all.rsvr);
 
-        const runningState  = deref(projectRunningStates, [projectId, requestedStack, requestedState]);
+        const runningState  = deref(projectRunningStates, [reqProjectId, requestedStack, requestedState]);
 
         return sg.__run2({}, [function(result, next, last) {
 
           // -----------------------------------------------------------------------------------------------
           // Get the more-specific service
 
-          const serviceFinder = getServiceFinder(projectId, projectServicePrefix, requestedStack, requestedState);
+          const serviceFinder = getServiceFinder(reqProjectId, reqProjectServicePrefix, requestedStack, requestedState);
 
           return serviceFinder.getOneServiceLocation(serviceId, (err, location) => {
             if (sg.ok(err, location)) {
-              serviceIdMsg    = projectServicePrefix+':'+serviceIdMsg;
+              serviceIdMsg    = reqProjectServicePrefix+':'+serviceIdMsg;
               result.location = location;
 
               return last(null, result);
@@ -113,11 +117,11 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
 
           if (requestedState !== 'next')  { return next(); }
 
-          const serviceFinder = getServiceFinder(projectId, projectServicePrefix, requestedStack, 'main');
+          const serviceFinder = getServiceFinder(reqProjectId, reqProjectServicePrefix, requestedStack, 'main');
 
           return serviceFinder.getOneServiceLocation(serviceId, (err, location) => {
             if (sg.ok(err, location)) {
-              serviceIdMsg    = projectServicePrefix+':'+serviceIdMsg;
+              serviceIdMsg    = reqProjectServicePrefix+':'+serviceIdMsg;
               result.location = location;
 
               return last(null, result);
@@ -132,7 +136,7 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
 
           if (!runningState.baseProjectServicePrefix) { return next(); }
 
-          const serviceFinder = getServiceFinder(projectId, runningState.baseProjectServicePrefix, requestedStack, requestedState);
+          const serviceFinder = getServiceFinder(reqProjectId, runningState.baseProjectServicePrefix, requestedStack, requestedState);
 
           return serviceFinder.getOneServiceLocation(serviceId, (err, location) => {
             if (sg.ok(err, location)) {
@@ -152,7 +156,7 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
           if (requestedState !== 'next')                { return next(); }
           if (!runningState.baseProjectServicePrefix)   { return next(); }
 
-          const serviceFinder = getServiceFinder(projectId, runningState.baseProjectServicePrefix, requestedStack, 'main');
+          const serviceFinder = getServiceFinder(reqProjectId, runningState.baseProjectServicePrefix, requestedStack, 'main');
 
           return serviceFinder.getOneServiceLocation(serviceId, (err, location) => {
             if (sg.ok(err, location)) {
@@ -182,10 +186,23 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
    *  TODO: use projectByDomainName
    */
   const handleUnProject = function(req, res, params, splats, query, match) {
-    var projectId = '';
+    var   projectId = 'sa';
 
-    projectId = 'sa';
-    const handler = handlers[projectId];
+    const nextRouteSegment = _.compact(splats.join('/').split('/'))[0];
+
+    if (nextRouteSegment in knownProjectIds) {
+      projectId = nextRouteSegment;
+    }
+
+    // Update the matched routing object
+    match.params.projectId  = projectId;
+    params.projectId        = projectId;
+
+    var   handler = handlers[projectId];
+
+    if (!handler) {
+      handler = handlers.sa;
+    }
 
     if (!handler) {
       console.error(`Could not find projectId for ${urlLib.parse(req.url).pathname}`);
@@ -205,7 +222,7 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
 
     console.log(`xapi reconfiguring`);
 
-    var   projectByDomainName_, appBySubdomain_, xapiPrefixes_, app_prjs_;
+    var   projectByDomainName_, appBySubdomain_, xapiPrefixes_, app_prjs_, knownProjectIds_ = {};
 
     r = r_;
 
@@ -217,6 +234,8 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
       if (project.projectId === 'sa')   { saProject = project; }
       if (project.uriBase)              { m = sg.kv(m, project.uriBase.split('/')[0], project); }
       if (project.uriTestBase)          { m = sg.kv(m, project.uriTestBase.split('/')[0], project); }
+
+      knownProjectIds_ = sg.kv(knownProjectIds_, project.projectId, {});
 
       projects[project.projectId] = project;
       return m;
@@ -236,6 +255,8 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
     });
 
     app_prjs_ = sg.reduce(r.db.appprjRecords, {}, (m, appprj) => {
+      knownProjectIds_ = sg.kv(knownProjectIds_, appprj.projectId, appprj);
+
       return sg.kv(m, appprj.appProjectId, appprj);
     });
 
@@ -301,9 +322,33 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
         });
       }
     });
-    // console.log('-------------------------------', sg.inspect(projectRunningStates));
+    //console.log('-------------------------------', util.inspect(projectRunningStates, {depth:null, colors:true}));
+
+    // Some app_prjs have 'sa' as a base project; setup their running state
+    _.each(r.db.appprjRecords, (appprj) => {
+
+      // Only set it if we do not alreay have it
+      if (projectRunningStates[appprj.projectId]) { return; }
+
+      const projectServicePrefix  = appprj.serviceNamespace;
+
+      setOnn(projectRunningStates, appprj.projectId, sg.deepCopy(deref(projectRunningStates, 'sa')));
+
+      // Fixup entries
+      _.each(deref(projectRunningStates, appprj.projectId), (runningStack, runningStackName) => {
+        _.each(runningStack, (runningState, runningStateName) => {
+          const baseProjectServicePrefix = deref(projectRunningStates, [appprj.projectId, runningStackName, runningStateName, 'projectServicePrefix']);
+
+          setOnn(projectRunningStates, [appprj.projectId, runningStackName, runningStateName, 'baseProjectServicePrefix'],   baseProjectServicePrefix);
+          setOnn(projectRunningStates, [appprj.projectId, runningStackName, runningStateName, 'projectServicePrefix'],       projectServicePrefix);
+          setOnn(projectRunningStates, [appprj.projectId, runningStackName, runningStateName, 'projectId'],                  appprj.projectId);
+        });
+      });
+    });
+    //console.log('-------------------------------', util.inspect(projectRunningStates, {depth:null, colors:true}));
 
     // Update the global vars all at once
+    knownProjectIds     = knownProjectIds_;
     projectByDomainName = projectByDomainName_;
     appBySubdomain      = appBySubdomain_;
     xapiPrefixes        = xapiPrefixes_;
