@@ -18,6 +18,13 @@ const xapiRoutes              = ['routes/localhost-xroutes'];
 const main = function() {
   const routes = [...(ARGV.public? publicRoutes:[]), ...(ARGV.xapi? xapiRoutes:[])];
 
+  if (routes.length === 0) {
+    console.error('---------------------------------------------------------------------------------');
+    console.error('NO ROUTES LOADED-----------------------------------------------------------------');
+    console.error('  You probably want to load public (--public) or private (--xapi) routes');
+    console.error('---------------------------------------------------------------------------------');
+  }
+
   // My chance to load routes or on-starters
   const addModRoutes = function(addRoute, onStart, db /*, rawAddRoute, callback*/) {
     var   args          = _.rest(arguments, 3);
