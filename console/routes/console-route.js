@@ -198,7 +198,7 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
     };
   };
 
-  const consoleHandler  = mkHandler('console', {rewriteIsSplats:true});
+  const consoleHandler  = mkHandler('console');
   const xapiHandler     = mkHandler('xapi');
 
 
