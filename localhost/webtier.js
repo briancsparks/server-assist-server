@@ -4,6 +4,9 @@
  *
  *  This file is just the Node.js server.
  *
+ *  $ serva && pm2 start localhost/webtier.js --watch -- --port=5777 --public
+ *  $ sudo nginx -t && sudo nginx
+ *
  */
 const sg                      = require('sgsg');
 const _                       = sg._;
