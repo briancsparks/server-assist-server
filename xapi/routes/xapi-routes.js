@@ -77,7 +77,7 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
     const projectId                 = app_prj.project.projectId;
     var   projectServicePrefix      = app_prj.project.serviceName || app_prj.project.projectName;
 
-    const handler2  = mkHandler2(usersDb, serviceFinderCache, projectRunningStates, knownProjectIds, app_prj, app_prjName);
+    const handler2  = mkHandler2(r, usersDb, serviceFinderCache, projectRunningStates, knownProjectIds, app_prj, app_prjName);
 
     return (handlers[projectId] = function(req, res, params, splats, query_, match) {
 

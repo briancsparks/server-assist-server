@@ -7,6 +7,7 @@ const _                       = sg._;
 const serverassist            = sg.include('serverassist') || require('serverassist');
 const clusterLib              = sg.include('js-cluster')   || require('js-cluster');
 const urlLib                  = require('url');
+const helper                  = require('../../console/helper');
 
 const normlz                  = sg.normlz;
 const deref                   = sg.deref;
@@ -20,6 +21,9 @@ const myStack                 = serverassist.myStack();
 const utilIp                  = serverassist.utilIp();
 const ServiceList             = clusterLib.ServiceList;
 const mkServiceFinder2        = serverassist.mkServiceFinder2ForStack;
+const reconfigure             = helper.reconfigure;
+const ServiceFinderCache      = helper.ServiceFinderCache;
+const mkHandler2              = helper.mkHandler;
 
 var   defServiceName          = 'ntl_console_clusterboard_1';
 var   defPrefix               = '/ntl/clusterboard'
@@ -40,6 +44,8 @@ const appRecord = {
   requireClientCerts  : true,
   subdomain           : 'console.'
 };
+
+const useHelperHandler  = false;
 
 var lib = {};
 
@@ -62,10 +68,29 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
     return serviceFinders[stack][serviceId];
   };
 
+  var   projectRunningStates    = {};
+  var   serviceFinderCache      = new ServiceFinderCache();
+  var   knownProjectIds         = {};
+
   const mkHandler = function(kind, options_) {
     const options         = options_ || {};
     var   rewriteIsSplats = options.rewriteIsSplats || false;
+
+    //const handler2  = mkHandler2(usersDb, serviceFinderCache, projectRunningStates, knownProjectIds, app_prj, app_prjName);
+    const handler2  = mkHandler2(r, usersDb, serviceFinderCache, projectRunningStates, knownProjectIds, {}, '');
+
     return function(req, res, params, splats, query, match) {
+
+      if (useHelperHandler) {
+        return handler2(req, res, params, splats, query_, match, {
+          checkClientCert : function(isOk, user, callback) {
+            // @todo Check that the user is OK
+            return callback();
+          }
+        }, function(err, serviceIdMsg, location, query) {
+          return redirectToService(req, res, serviceIdMsg, err, location, query);
+        });
+      }
 
       // Nginx might be configured to allow client certs 'optionally' -- however, they are not optional
       const clientVerify = req.headers['x-client-verify'];

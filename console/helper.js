@@ -22,11 +22,13 @@
 const sg                      = require('sgsg');
 const _                       = sg._;
 const serverassist            = sg.include('serverassist') || require('serverassist');
+const urlLib                  = require('url');
 
 const deref                   = sg.deref;
 const setOnn                  = sg.setOnn;
 const isClientCertOk          = serverassist.isClientCertOk;
 const mkServiceFinder2        = serverassist.mkServiceFinder2;
+const mkStackServiceFinder2   = serverassist.mkServiceFinder2ForStack;
 
 var lib = {};
 
@@ -214,41 +216,142 @@ lib.ServiceFinderCache = function() {
     return serviceFinder;
   };
 
+  self.getStackServiceFinder = function(projectServicePrefix, requestedStack) {
+    const index         = [projectServicePrefix, requestedStack];
+    var   serviceFinder;
+
+    if (!(serviceFinder = deref(serviceFinders, index))) {
+      serviceFinder = mkStackServiceFinder2(projectServicePrefix, requestedStack);
+      setOnn(serviceFinders, index, serviceFinder);
+    }
+
+    return serviceFinder;
+  };
+
 };
 
 /**
  *  Makes handlers
  */
-lib.mkHandler = function(usersDb, serviceFinderCache, projectRunningStates, knownProjectIds, app_prj, app_prjName, options_) {
-  const projectId                 = app_prj.project.projectId;
-  var   projectServicePrefix      = app_prj.project.serviceName || app_prj.project.projectName;
+lib.mkHandler = function(r, usersDb, serviceFinderCache, projectRunningStates, knownProjectIds, app_prj, app_prjName, options__) {
+  const options_                  = options__ || {};
+  const serviceFinderStack        = options_.serviceFinderStack;
+  const defServiceName            = options_.defServiceName;
+  const defPrefix                 = options_.defPrefix;
+
+  const projectId                 = deref(app_prj, 'project.projectId');
+  var   projectServicePrefix      = deref(app_prj, 'project.serviceName') || deref(app_prj, 'project.projectName');
 
   return (function(req, res, params, splats, query_, match, options, callback) {
     return isClientCertOk(req, res, usersDb, (err, isOk, user) => {
 
-      if (err)    { console.error(err); return serverassist._403(req, res); }
-      if (!isOk)  { return serverassist._403(req, res); }
+      const url             = urlLib.parse(req.url, true);
 
-      // Figure out the parameters for the request (as opposed to what was
-      // setup when calling mkHandler)
-      const reqProjectId            = params.projectId || projectId;
-      const reqProjectServicePrefix = (knownProjectIds[reqProjectId] || {}).serviceNamespace || projectServicePrefix;
-      const reqApp_prjName          = app_prjName.replace(projectId, reqProjectId);
-
-      const all           = sg._extend(params || {}, query_ || {});
-      const query         = _.omit(query_, 'rsvr');
-
-      // The id of the service (like mxp_xapi_s3_1) -- (aname === s3, in this case)
-      const serviceId     = _.compact([reqApp_prjName, params.aname, params.version]).join('_');
-      var serviceIdMsg    = serviceId;
-
-      // Which stack?
-      const [ requestedStack, requestedState ] = serverassist.decodeRsvr(all.rsvr);
-
-      const runningState  = deref(projectRunningStates, [reqProjectId, requestedStack, requestedState]);
-
-      // Find service
       return sg.__run2({}, [function(result, next, last) {
+        if (err)                                    { console.error(err); return serverassist._403(req, res); }
+        if (!isOk)                                  { return serverassist._403(req, res); }
+
+        // Let caller see the client-cert info
+        if (!options.checkClientCert)               { return next(); }
+
+        return options.checkClientCert(isOk, user, next);
+
+      }, function(result, next, last) {
+
+        // Figure out the parameters for the request (as opposed to what was
+        // setup when calling mkHandler)
+        const reqProjectId            = params.projectId || projectId;
+        const reqApp_prjName          = app_prjName.replace(projectId, reqProjectId);
+        const reqProjectServicePrefix = (knownProjectIds[reqProjectId] || {}).serviceNamespace ||
+                                        deref(r.db, ['projectRecords', reqProjectId, 'serviceName']) ||
+                                        deref(r.db, ['projectRecords', projectId, 'serviceName']) ||
+                                        projectServicePrefix;
+
+        const all           = sg._extend(params || {}, query_ || {});
+        const query         = _.omit(query_, 'rsvr');
+
+        // The id of the service (like mxp_xapi_s3_1) -- (aname === s3, in this case)
+        const serviceId     = _.compact([reqApp_prjName, params.aname, params.version]).join('_');
+        var serviceIdMsg    = serviceId;
+
+        // Which stack?
+        const [ requestedStack, requestedState ] = serverassist.decodeRsvr(all.rsvr);
+
+        const runningState  = deref(projectRunningStates, [reqProjectId, requestedStack, requestedState]);
+
+        return next();
+
+      }, function(result, next, last) {
+
+        // Is the request for the default service?
+
+        if (!defServiceName || serviceId !== defServiceName)       { return next(); }
+
+        const serviceFinder = serviceFinderCache.getStackServiceFinder('serverassist', 'cluster');
+
+        return serviceFinder.getOneServiceLocation(defServiceName, (err, location) => {
+          if (sg.ok(err, location)) {
+
+            result.rewrite = url.href;
+            if (defPrefix && url.href.startsWith(defPrefix)) {
+              result.rewrite = result.rewrite.substring(defPrefix.length);
+            }
+
+            return last(null, result);
+          }
+
+          return next();
+        });
+
+      }, function(result, next, last) {
+        if (!serviceFinderStack)          { return next(); }
+
+        const serviceFinder = serviceFinderCache.getStackServiceFinder(reqProjectServicePrefix, serviceFinderStack);
+
+        return serviceFinder.getOneServiceLocation(serviceId, (err, location) => {
+          if (sg.ok(err, location)) {
+            serviceIdMsg    = reqProjectServicePrefix+':'+serviceId;
+            result.location = location;
+
+            return last(null, result);
+          }
+          return next();
+        });
+
+      }, function(result, next, last) {
+        if (!serviceFinderStack)          { return next(); }
+
+        const myPrefix      = deref(r.db, 'projectRecords.sa.serviceName');
+        const serviceFinder = serviceFinderCache.getStackServiceFinder(myPrefix, serviceFinderStack);
+
+        return serviceFinder.getOneServiceLocation(serviceId, (err, location) => {
+          if (sg.ok(err, location)) {
+            serviceIdMsg    = myPrefix+':'+serviceId;
+            result.location = location;
+
+            return last(null, result);
+          }
+          return next();
+        });
+
+      }, function(result, next, last) {
+        if (!serviceFinderStack)          { return next(); }
+
+        const myPrefix      = deref(r.db, 'projectRecords.sa.serviceName');
+        const serviceFinder = serviceFinderCache.getStackServiceFinder(myPrefix, serviceFinderStack);
+
+        return serviceFinder.getOneServiceLocation('serverassist', (err, location) => {
+          if (sg.ok(err, location)) {
+            serviceIdMsg    = myPrefix+':'+'serverassist';
+            result.location = location;
+
+            return last(null, result);
+          }
+          return next();
+        });
+
+      }, function(result, next, last) {
+        if (serviceFinderStack)          { return next(); }
 
         // -----------------------------------------------------------------------------------------------
         // Get the more-specific service
@@ -271,6 +374,7 @@ lib.mkHandler = function(usersDb, serviceFinderCache, projectRunningStates, know
         });
 
       }, function(result, next, last) {
+        if (serviceFinderStack)          { return next(); }
 
         // -----------------------------------------------------------------------------------------------
         // If we have not found the service, fall back (next --> main)
@@ -295,6 +399,7 @@ lib.mkHandler = function(usersDb, serviceFinderCache, projectRunningStates, know
         });
 
       }, function(result, next, last) {
+        if (serviceFinderStack)          { return next(); }
 
         // -----------------------------------------------------------------------------------------------
         // If we cannot find the service from the more-specific id, just use the base version
@@ -319,6 +424,7 @@ lib.mkHandler = function(usersDb, serviceFinderCache, projectRunningStates, know
         });
 
       }, function(result, next, last) {
+        if (serviceFinderStack)          { return next(); }
 
         // -----------------------------------------------------------------------------------------------
         // If we still have not found the service, fall back (next --> main), using base version
@@ -345,11 +451,16 @@ lib.mkHandler = function(usersDb, serviceFinderCache, projectRunningStates, know
 
       }], function last(err, result) {
 
-        // -----------------------------------------------------------------------------------------------
-        // Send the result
+        // Now, translate the route (rewrite phase)
+        return sg.__run2(result, [function(result, next, last) {
+          return next();
+        }], function lastRewrite(err, result) {
 
-        return callback(err, serviceIdMsg, result.location, {query});
-//        return redirectToService(req, res, serviceIdMsg, err, result.location, {query});
+          // -----------------------------------------------------------------------------------------------
+          // Send the result
+
+          return callback(err, serviceIdMsg, result.location, {query});
+        });
       });
 
     });
