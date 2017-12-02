@@ -244,12 +244,64 @@ lib.mkHandler = function(r, usersDb, serviceFinderCache, projectRunningStates, k
 
   return (function(req, res, params, splats, query_, match, options, callback) {
     return isClientCertOk(req, res, usersDb, (err, isOk, user) => {
+      if (err)                                    { console.error(err); return serverassist._403(req, res); }
+      if (!isOk)                                  { return serverassist._403(req, res); }
 
       const url             = urlLib.parse(req.url, true);
 
+      // Figure out the parameters for the request (as opposed to what was setup when calling mkHandler)
+      const reqProjectId            = params.projectId || projectId;
+      const reqApp_prjName          = app_prjName.replace(projectId, reqProjectId);
+      const reqProjectServicePrefix = (knownProjectIds[reqProjectId] || {}).serviceNamespace ||
+                                      deref(r.db, ['projectRecords', reqProjectId, 'serviceName']) ||
+                                      deref(r.db, ['projectRecords', projectId, 'serviceName']) ||
+                                      projectServicePrefix;
+
+      const all           = sg._extend(params || {}, query_ || {});
+      const query         = _.omit(query_, 'rsvr');
+
+      // The id of the service (like mxp_xapi_s3_1) -- (aname === s3, in this case)
+      const serviceId     = _.compact([reqApp_prjName, params.aname, params.version]).join('_');
+      var serviceIdMsg    = serviceId;
+
+      // Which stack?
+      const [ requestedStack, requestedState ] = serverassist.decodeRsvr(all.rsvr);
+
+      const runningState  = deref(projectRunningStates, [reqProjectId, requestedStack, requestedState]);
+
+      /**
+       *
+       * serviceId -- like ntl_xapi_telemetry_1
+       *
+       * if next is null, last acts like callback
+       */
+      const lookupService = function(projectServicePrefix, serviceId, restFinderParams, result, next, last) {
+
+        const callback      = next === null ? last : null;
+        const fname         = restFinderParams.length === 1 ? 'getStackServiceFinder' : 'getServiceFinder';
+        const serviceFinder = serviceFinderCache[fname](projectServicePrefix, ...restFinderParams);
+
+        return serviceFinder.getOneServiceLocation(serviceId, function(err, location, serviceKey) {
+
+          if (sg.ok(err, location)) {
+            result.location = location;
+          }
+
+          if (callback) {
+            return callback(err, location, result);
+          }
+
+          if (sg.ok(err, location)) {
+            result.msg  = `${serviceKey} (${projectServicePrefix}:${serviceId})`;
+            return last(null, result);
+          }
+
+          /* otherwise */
+          return next();
+        });
+      };
+
       return sg.__run2({}, [function(result, next, last) {
-        if (err)                                    { console.error(err); return serverassist._403(req, res); }
-        if (!isOk)                                  { return serverassist._403(req, res); }
 
         // Let caller see the client-cert info
         if (!options.checkClientCert)               { return next(); }
@@ -258,26 +310,16 @@ lib.mkHandler = function(r, usersDb, serviceFinderCache, projectRunningStates, k
 
       }, function(result, next, last) {
 
-        // Figure out the parameters for the request (as opposed to what was
-        // setup when calling mkHandler)
-        const reqProjectId            = params.projectId || projectId;
-        const reqApp_prjName          = app_prjName.replace(projectId, reqProjectId);
-        const reqProjectServicePrefix = (knownProjectIds[reqProjectId] || {}).serviceNamespace ||
-                                        deref(r.db, ['projectRecords', reqProjectId, 'serviceName']) ||
-                                        deref(r.db, ['projectRecords', projectId, 'serviceName']) ||
-                                        projectServicePrefix;
-
-        const all           = sg._extend(params || {}, query_ || {});
-        const query         = _.omit(query_, 'rsvr');
-
-        // The id of the service (like mxp_xapi_s3_1) -- (aname === s3, in this case)
-        const serviceId     = _.compact([reqApp_prjName, params.aname, params.version]).join('_');
-        var serviceIdMsg    = serviceId;
-
-        // Which stack?
-        const [ requestedStack, requestedState ] = serverassist.decodeRsvr(all.rsvr);
-
-        const runningState  = deref(projectRunningStates, [reqProjectId, requestedStack, requestedState]);
+        if (options_.lookup) {
+          return callback(lookupService, {
+            projectId             : reqProjectId,
+            app_prjName           : reqApp_prjName,
+            servicePrefix         : reqProjectServicePrefix,
+            serviceId,
+            stack                 : requestedStack,
+            state                 : requestedState
+          });
+        }
 
         return next();
 
@@ -292,7 +334,9 @@ lib.mkHandler = function(r, usersDb, serviceFinderCache, projectRunningStates, k
         return serviceFinder.getOneServiceLocation(defServiceName, (err, location) => {
           if (sg.ok(err, location)) {
 
-            result.rewrite = url.href;
+            result.location = location;
+            result.rewrite  = url.href;
+
             if (defPrefix && url.href.startsWith(defPrefix)) {
               result.rewrite = result.rewrite.substring(defPrefix.length);
             }
