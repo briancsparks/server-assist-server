@@ -1,17 +1,43 @@
 
 /**
+ *  Helpers for routing a request within the cluster.
+ *
+ *  When a request arrives at the webtier, it will get routed by one of two mechanisms.
+ *  The first is the standard SA way, with entries in the DB for apps, projects and all
+ *  that. This file is concerned with the other way. It is for use by modules that are
+ *  not customer-facing, and are 'inernal' to the SA system, and the SA instance. Things
+ *  like the xapi module, including the retrieval of telemetry data.
+ *
+ *  Essentially, when a request arrives it has 4 initial path components. This module
+ *  helps map between those route-parts, and the beacon that modules put into Redis.
+ *  As well as helping actually do the routing.
+ *
+ *  Things of note:
+ *
+ *  * How to rewrite the path.
+ *  * Building the handler.
+ *  * Building most routes.
  *
  */
 const sg                      = require('sgsg');
 const _                       = sg._;
+const serverassist            = sg.include('serverassist') || require('serverassist');
 
 const deref                   = sg.deref;
 const setOnn                  = sg.setOnn;
+const isClientCertOk          = serverassist.isClientCertOk;
+const mkServiceFinder2        = serverassist.mkServiceFinder2;
 
 var lib = {};
 
 /**
  *  Sets various things, based on the cluster configuration.
+ *
+ *  Internal modules should call serverassist.configuration() regularly, and if the resulting
+ *  configuration has changed, call this function. It understands things like the running
+ *  state of the system, and how that figures into routing. For example, which color is 'main'
+ *  in which stack.
+ *
  */
 const reconfigure = lib.reconfigure = function(modName, r_, projects, projectRunningStates) {
 
@@ -160,6 +186,175 @@ const reconfigure = lib.reconfigure = function(modName, r_, projects, projectRun
   };
 };
 
+/**
+ *  Caches serviceFinder2s
+ */
+lib.ServiceFinderCache = function() {
+  var self = this;
+
+  var serviceFinders        = {};
+  var r                     = {};
+  var projectRunningStates  = {};
+
+  self.reset = self.flush = function(r_, projectRunningStates_) {
+    serviceFinders          = {};
+    r                       = r_;
+    projectRunningStates    = projectRunningStates_;
+  };
+
+  self.getServiceFinder = function(projectId, projectServicePrefix, requestedStack, requestedState) {
+    const index         = [projectServicePrefix, requestedStack, requestedState];
+    var   serviceFinder;
+
+    if (!(serviceFinder = deref(serviceFinders, index))) {
+      serviceFinder = mkServiceFinder2(projectId, projectServicePrefix, requestedStack, requestedState, r, projectRunningStates);
+      setOnn(serviceFinders, index, serviceFinder);
+    }
+
+    return serviceFinder;
+  };
+
+};
+
+/**
+ *  Makes handlers
+ */
+lib.mkHandler = function(usersDb, serviceFinderCache, projectRunningStates, knownProjectIds, app_prj, app_prjName, options_) {
+  const projectId                 = app_prj.project.projectId;
+  var   projectServicePrefix      = app_prj.project.serviceName || app_prj.project.projectName;
+
+  return (function(req, res, params, splats, query_, match, options, callback) {
+    return isClientCertOk(req, res, usersDb, (err, isOk, user) => {
+
+      if (err)    { console.error(err); return serverassist._403(req, res); }
+      if (!isOk)  { return serverassist._403(req, res); }
+
+      // Figure out the parameters for the request (as opposed to what was
+      // setup when calling mkHandler)
+      const reqProjectId            = params.projectId || projectId;
+      const reqProjectServicePrefix = (knownProjectIds[reqProjectId] || {}).serviceNamespace || projectServicePrefix;
+      const reqApp_prjName          = app_prjName.replace(projectId, reqProjectId);
+
+      const all           = sg._extend(params || {}, query_ || {});
+      const query         = _.omit(query_, 'rsvr');
+
+      // The id of the service (like mxp_xapi_s3_1) -- (aname === s3, in this case)
+      const serviceId     = _.compact([reqApp_prjName, params.aname, params.version]).join('_');
+      var serviceIdMsg    = serviceId;
+
+      // Which stack?
+      const [ requestedStack, requestedState ] = serverassist.decodeRsvr(all.rsvr);
+
+      const runningState  = deref(projectRunningStates, [reqProjectId, requestedStack, requestedState]);
+
+      // Find service
+      return sg.__run2({}, [function(result, next, last) {
+
+        // -----------------------------------------------------------------------------------------------
+        // Get the more-specific service
+        //
+        // Assuming green matches main or next from requestedState
+        //
+        //    mobilewebprint-green-test:mwp_xapi_telemetry_1
+        //            netlab-green-test:ntl_xapi_telemetry_1
+
+        const serviceFinder = serviceFinderCache.getServiceFinder(reqProjectId, reqProjectServicePrefix, requestedStack, requestedState);
+
+        return serviceFinder.getOneServiceLocation(serviceId, (err, location) => {
+          if (sg.ok(err, location)) {
+            serviceIdMsg    = reqProjectServicePrefix+':'+serviceIdMsg;
+            result.location = location;
+
+            return last(null, result);
+          }
+          return next();
+        });
+
+      }, function(result, next, last) {
+
+        // -----------------------------------------------------------------------------------------------
+        // If we have not found the service, fall back (next --> main)
+        //
+        // Assuming blue is main, req is for next, and green is next
+        //
+        //    mobilewebprint-blue-test:mwp_xapi_telemetry_1
+        //            netlab-blue-test:ntl_xapi_telemetry_1
+
+        if (requestedState !== 'next')  { return next(); }
+
+        const serviceFinder = serviceFinderCache.getServiceFinder(reqProjectId, reqProjectServicePrefix, requestedStack, 'main');
+
+        return serviceFinder.getOneServiceLocation(serviceId, (err, location) => {
+          if (sg.ok(err, location)) {
+            serviceIdMsg    = reqProjectServicePrefix+':'+serviceIdMsg;
+            result.location = location;
+
+            return last(null, result);
+          }
+          return next();
+        });
+
+      }, function(result, next, last) {
+
+        // -----------------------------------------------------------------------------------------------
+        // If we cannot find the service from the more-specific id, just use the base version
+        //
+        // Assuming green matches main or next from requestedState
+        //
+        //    serverassist-green-test:mwp_xapi_telemetry_1
+        //    serverassist-green-test:ntl_xapi_telemetry_1
+
+        if (!runningState.baseProjectServicePrefix) { return next(); }
+
+        const serviceFinder = serviceFinderCache.getServiceFinder(reqProjectId, runningState.baseProjectServicePrefix, requestedStack, requestedState);
+
+        return serviceFinder.getOneServiceLocation(serviceId, (err, location) => {
+          if (sg.ok(err, location)) {
+            serviceIdMsg    = runningState.baseProjectServicePrefix+':'+serviceIdMsg;
+            result.location = location;
+
+            return last(null, result);
+          }
+          return next();
+        });
+
+      }, function(result, next, last) {
+
+        // -----------------------------------------------------------------------------------------------
+        // If we still have not found the service, fall back (next --> main), using base version
+        //
+        // Assuming blue is main, req is for next, and green is next
+        //
+        //    serverassist-blue-test:mwp_xapi_telemetry_1
+        //    serverassist-blue-test:ntl_xapi_telemetry_1
+
+        if (requestedState !== 'next')                { return next(); }
+        if (!runningState.baseProjectServicePrefix)   { return next(); }
+
+        const serviceFinder = serviceFinderCache.getServiceFinder(reqProjectId, runningState.baseProjectServicePrefix, requestedStack, 'main');
+
+        return serviceFinder.getOneServiceLocation(serviceId, (err, location) => {
+          if (sg.ok(err, location)) {
+            serviceIdMsg    = runningState.baseProjectServicePrefix+':'+serviceIdMsg;
+            result.location = location;
+
+            return last(null, result);
+          }
+          return next();
+        });
+
+      }], function last(err, result) {
+
+        // -----------------------------------------------------------------------------------------------
+        // Send the result
+
+        return callback(err, serviceIdMsg, result.location, {query});
+//        return redirectToService(req, res, serviceIdMsg, err, result.location, {query});
+      });
+
+    });
+  });
+};
 
 
 

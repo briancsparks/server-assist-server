@@ -19,6 +19,8 @@ const registerAsService       = serverassist.registerAsService;
 const redirectToService       = serverassist.redirectToService;
 const mkServiceFinder2        = serverassist.mkServiceFinder2;
 const reconfigure             = helper.reconfigure;
+const ServiceFinderCache      = helper.ServiceFinderCache;
+const mkHandler2              = helper.mkHandler;
 
 const appId                   = 'sa_xapi';
 const mount                   = '*/xapi/v1/';
@@ -36,6 +38,8 @@ const appRecord = {
   subdomain           : 'console.'
 };
 
+const useHelperHandler  = false;
+
 var   lib             = {};
 
 lib.addRoutes = function(addRoute, onStart, db, callback) {
@@ -47,6 +51,8 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
 
   var   projects       = {};
   const usersDb        = db.collection('users');
+
+  var   serviceFinderCache = new ServiceFinderCache();
 
   var   serviceFinders   = {};
   const getServiceFinder = function(projectId, projectServicePrefix, requestedStack, requestedState) {
@@ -71,7 +77,16 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
     const projectId                 = app_prj.project.projectId;
     var   projectServicePrefix      = app_prj.project.serviceName || app_prj.project.projectName;
 
+    const handler2  = mkHandler2(usersDb, serviceFinderCache, projectRunningStates, knownProjectIds, app_prj, app_prjName);
+
     return (handlers[projectId] = function(req, res, params, splats, query_, match) {
+
+      if (useHelperHandler) {
+        return handler2(req, res, params, splats, query_, match, {}, function(err, serviceIdMsg, location, query) {
+          return redirectToService(req, res, serviceIdMsg, err, location, query);
+        });
+      }
+
       return isClientCertOk(req, res, usersDb, (err, isOk, user) => {
 
         if (err)    { console.error(err); return serverassist._403(req, res); }
@@ -246,6 +261,8 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
             knownProjectIds     = newConfiguration.knownProjectIds;
 
             serviceFinders      = {};
+
+            serviceFinderCache.reset(r, projectRunningStates);
           }
         }
 
