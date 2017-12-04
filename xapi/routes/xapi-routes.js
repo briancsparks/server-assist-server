@@ -1,6 +1,16 @@
 
 /**
  *
+ *  # Netlab -- Galaxy s5 with T-Mobile
+ *  $ sacurl -sS 'https://console.mobilewebassist.net/telemetry/xapi/v1/ntl/download?rsvr=hqqa&sessionId=zIP0najQA74IImI51VE9eyu30furniBFmkdtwo7Dn2ymRhePp624kx6Prf9dmRBs-20171127061656241'
+ *
+ *  # Also:
+ *  # IzKssiMC908vVmlEJPxdzAwQ4kGgYnevb1O7IK0oUYUvXyTyXbfFcCYmUDolQEuw/20171121165041059
+ *  # r3K8F7Yv5H8EFFpE3kBO0K6i2IbricsvmT0gkdLc9RVdm5xYMnHy9Ca0HtdoLn0Y/20171106143718612
+ *
+ *  # Mwp:
+ *  $ sacurl -sS 'https://console.mobilewebassist.net/telemetry/xapi/v1/mwp/download?rsvr=hqqa&sessionId=NAH0jIP4HSJ85IJ6rgPSR6Zib2DidonIZsjaBmTy1gTCpAlyrk50RyHCdIliFOBS'
+ *
  */
 const sg                      = require('sgsg');
 const _                       = sg._;
@@ -38,7 +48,7 @@ const appRecord = {
   subdomain           : 'console.'
 };
 
-const useHelperHandler  = false;
+const useHelperHandler  = 2;
 
 var   lib             = {};
 
@@ -77,11 +87,64 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
     const projectId                 = app_prj.project.projectId;
     var   projectServicePrefix      = app_prj.project.serviceName || app_prj.project.projectName;
 
-    const handler2  = mkHandler2(r, usersDb, serviceFinderCache, projectRunningStates, knownProjectIds, app_prj, app_prjName);
+    const handler2Options = {lookup:true};
+    const handler2        = mkHandler2(r, usersDb, serviceFinderCache, projectRunningStates, knownProjectIds, app_prj, app_prjName, handler2Options);
 
     return (handlers[projectId] = function(req, res, params, splats, query_, match) {
 
       if (useHelperHandler) {
+        if (useHelperHandler === 2) {
+          return handler2(req, res, params, splats, query_, match, {}, function(lookup, config) {
+
+            return sg.__run2({}, [function(result, next, last) {
+
+              // -----------------------------------------------------------------------------------------------
+              // Get the more-specific service
+              //
+              //    mobilewebprint:mwp_xapi_telemetry_1
+              //            netlab:ntl_xapi_telemetry_1
+
+              return lookup(config.servicePrefix, config.serviceId, [config.projectId, config.stack, config.state], result, next, last);
+
+            }, function(result, next, last) {
+
+              // -----------------------------------------------------------------------------------------------
+              // If we have not found the service, fall back (next --> main)
+
+              if (requestedState !== 'next')  { return next(); }
+              return lookup(config.servicePrefix, config.serviceId, [config.projectId, config.stack, 'main'], result, next, last);
+
+            }, function(result, next, last) {
+
+              // -----------------------------------------------------------------------------------------------
+              // If we cannot find the service from the more-specific id, just use the base version
+
+              if (!runningState.baseProjectServicePrefix) { return next(); }
+
+              return lookup(runningState.baseProjectServicePrefix, config.serviceId, [config.projectId, config.stack, config.state], result, next, last);
+
+            }, function(result, next, last) {
+
+              // -----------------------------------------------------------------------------------------------
+              // If we still have not found the service, fall back (next --> main), using base version
+
+              if (requestedState !== 'next')                { return next(); }
+              if (!runningState.baseProjectServicePrefix)   { return next(); }
+
+              return lookup(runningState.baseProjectServicePrefix, config.serviceId, [config.projectId, config.stack, 'main'], result, next, last);
+
+            }], function last(err, result) {
+
+              // -----------------------------------------------------------------------------------------------
+              // Send the result
+
+              return redirectToService(req, res, result.msg, err, result.location, {query:result.query});
+
+            });
+          });
+        }
+
+        /* otherwise */
         return handler2(req, res, params, splats, query_, match, {}, function(err, serviceIdMsg, location, query) {
           return redirectToService(req, res, serviceIdMsg, err, location, query);
         });

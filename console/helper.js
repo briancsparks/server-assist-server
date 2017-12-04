@@ -204,7 +204,7 @@ lib.ServiceFinderCache = function() {
     projectRunningStates    = projectRunningStates_;
   };
 
-  self.getServiceFinder = function(projectId, projectServicePrefix, requestedStack, requestedState) {
+  self.getServiceFinder = function(projectServicePrefix, projectId, requestedStack, requestedState) {
     const index         = [projectServicePrefix, requestedStack, requestedState];
     var   serviceFinder;
 
@@ -285,6 +285,12 @@ lib.mkHandler = function(r, usersDb, serviceFinderCache, projectRunningStates, k
 
           if (sg.ok(err, location)) {
             result.location = location;
+            result.query    = query;
+          }
+
+          if (sg.ok(err, serviceKey)) {
+            result.serviceKey = serviceKey;
+            result.msg        = `${serviceKey} (${projectServicePrefix}:${serviceId})`;
           }
 
           if (callback) {
@@ -292,7 +298,6 @@ lib.mkHandler = function(r, usersDb, serviceFinderCache, projectRunningStates, k
           }
 
           if (sg.ok(err, location)) {
-            result.msg  = `${serviceKey} (${projectServicePrefix}:${serviceId})`;
             return last(null, result);
           }
 
@@ -405,7 +410,7 @@ lib.mkHandler = function(r, usersDb, serviceFinderCache, projectRunningStates, k
         //    mobilewebprint-green-test:mwp_xapi_telemetry_1
         //            netlab-green-test:ntl_xapi_telemetry_1
 
-        const serviceFinder = serviceFinderCache.getServiceFinder(reqProjectId, reqProjectServicePrefix, requestedStack, requestedState);
+        const serviceFinder = serviceFinderCache.getServiceFinder(reqProjectServicePrefix, reqProjectId, requestedStack, requestedState);
 
         return serviceFinder.getOneServiceLocation(serviceId, (err, location) => {
           if (sg.ok(err, location)) {
@@ -430,7 +435,7 @@ lib.mkHandler = function(r, usersDb, serviceFinderCache, projectRunningStates, k
 
         if (requestedState !== 'next')  { return next(); }
 
-        const serviceFinder = serviceFinderCache.getServiceFinder(reqProjectId, reqProjectServicePrefix, requestedStack, 'main');
+        const serviceFinder = serviceFinderCache.getServiceFinder(reqProjectServicePrefix, reqProjectId, requestedStack, 'main');
 
         return serviceFinder.getOneServiceLocation(serviceId, (err, location) => {
           if (sg.ok(err, location)) {
@@ -455,7 +460,7 @@ lib.mkHandler = function(r, usersDb, serviceFinderCache, projectRunningStates, k
 
         if (!runningState.baseProjectServicePrefix) { return next(); }
 
-        const serviceFinder = serviceFinderCache.getServiceFinder(reqProjectId, runningState.baseProjectServicePrefix, requestedStack, requestedState);
+        const serviceFinder = serviceFinderCache.getServiceFinder(runningState.baseProjectServicePrefix, reqProjectId, requestedStack, requestedState);
 
         return serviceFinder.getOneServiceLocation(serviceId, (err, location) => {
           if (sg.ok(err, location)) {
@@ -481,7 +486,7 @@ lib.mkHandler = function(r, usersDb, serviceFinderCache, projectRunningStates, k
         if (requestedState !== 'next')                { return next(); }
         if (!runningState.baseProjectServicePrefix)   { return next(); }
 
-        const serviceFinder = serviceFinderCache.getServiceFinder(reqProjectId, runningState.baseProjectServicePrefix, requestedStack, 'main');
+        const serviceFinder = serviceFinderCache.getServiceFinder(runningState.baseProjectServicePrefix, reqProjectId, requestedStack, 'main');
 
         return serviceFinder.getOneServiceLocation(serviceId, (err, location) => {
           if (sg.ok(err, location)) {
