@@ -48,7 +48,7 @@ The script is `server-assist-server/build-scripts/build-instance`
 
 Build with the basic options, make an AMI
 
-```
+```sh
 (cd ~/dev/server-assist-server/ && ./build-scripts/build-instance --color=teal --service=web --stack=cluster)
 
 --base-name=    [xenial]

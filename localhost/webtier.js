@@ -4,7 +4,7 @@
  *
  *  This file is just the Node.js server.
  *
- *  $ serva && pm2 start localhost/webtier.js --watch -- --port=5777 --public
+ *  $ serva && pm2 start localhost/webtier.js --watch -- --port=5777 --public --vverbose
  *  $ sudo nginx -t && sudo nginx
  *
  */

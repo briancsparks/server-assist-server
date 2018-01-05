@@ -51,6 +51,9 @@ lib.addRoutes = function(addRoute, onStart, db /*, addRawRoute, callback */) {
    */
   const root = function(req, res, params, splats, query) {
 
+    console.log(destUrlObj);
+    console.log(req.url);
+
     var args = [];
 
     // Must use client certs, and might as well use SSL correctly
