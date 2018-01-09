@@ -47,3 +47,11 @@ if jsaws-build-block "install-repos" "Install repos"; then
   jsaws-build-block "install-repos" "done"
 fi
 
+if jsaws-build-block "nessus" "Install Nessus Scanner"; then
+  cd ~/zz_packages
+
+  aws s3 cp "s3://${SERVERASSIST_BUILDOUT_BUCKET}/buildout/packages/NessusAgent-6.10.7-ubuntu1110_amd64.deb" ./
+  sudo dpkg -i "$(find ./ -maxdepth 1 -type f | egrep 'NessusAgent.*\.deb$')"
+  jsaws-build-block "nessus" "done"
+fi
+

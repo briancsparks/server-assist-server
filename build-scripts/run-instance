@@ -65,7 +65,15 @@ ip="$(cat $instance_start | underscore select '.InstanceId ~ .PrivateIpAddress' 
 [[ -z $ip ]] && die "no ip"
 cd "${start_dir}"
 
-# Now, find all the certs and keys needed by the new instance
+# ---------- Set env ----------
+[[ -n $TENABLE_IO_KEY     ]] && sshix ${ip} "jsaws-set-env TENABLE_IO_KEY   ${TENABLE_IO_KEY}"
+if [[ $stack == pub ]]; then
+  [[ -n $TENABLE_IO_GROUP   ]] && sshix ${ip} "jsaws-set-env TENABLE_IO_GROUP ${TENABLE_IO_GROUP}-prod"
+else
+  [[ -n $TENABLE_IO_GROUP   ]] && sshix ${ip} "jsaws-set-env TENABLE_IO_GROUP ${TENABLE_IO_GROUP}-dev"
+fi
+
+# ---------- Now, find all the certs and keys needed by the new instance ----------
 
 # Only pertains to web instances
 if [[ $service == web ]]; then

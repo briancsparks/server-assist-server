@@ -44,3 +44,9 @@ else
 
 fi
 
+if [[ -n $TENABLE_IO_KEY && -n $TENABLE_IO_GROUP ]]; then
+  echo /opt/nessus_agent/sbin/nessuscli agent link --key="$TENABLE_IO_KEY" --host=cloud.tenable.com --port=443 --groups="${TENABLE_IO_GROUP}" --name="$(hostname)"
+  sudo /opt/nessus_agent/sbin/nessuscli agent link --key="$TENABLE_IO_KEY" --host=cloud.tenable.com --port=443 --groups="${TENABLE_IO_GROUP}" --name="$(hostname)"
+  sudo service nessusagent start
+fi
+
