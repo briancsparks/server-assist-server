@@ -181,7 +181,6 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
           //
           //    mobilewebprint:mwp_xapi_telemetry_1
           //            netlab:ntl_xapi_telemetry_1
-
           const serviceFinder = getServiceFinder(reqProjectId, reqProjectServicePrefix, requestedStack, requestedState);
 
           return serviceFinder.getOneServiceLocation(serviceId, (err, location) => {
@@ -315,15 +314,17 @@ lib.addRoutes = function(addRoute, onStart, db, callback) {
         if (sg.ok(err, r_)) {
           if (!sg.deepEqual(r_, r)) {
 
-            const newConfiguration = reconfigure('xapi', r = r_, projects, projectRunningStates);
+            projectRunningStates    = {};
+            const newConfiguration  = reconfigure('xapi', r = r_, projects, projectRunningStates);
 
-            projectByDomainName = newConfiguration.projectByDomainName;
-            appBySubdomain      = newConfiguration.appBySubdomain;
-            xapiPrefixes        = newConfiguration.xapiPrefixes;
-            app_prjs            = newConfiguration.app_prjs;
-            knownProjectIds     = newConfiguration.knownProjectIds;
+            projectByDomainName     = newConfiguration.projectByDomainName;
 
-            serviceFinders      = {};
+            appBySubdomain          = newConfiguration.appBySubdomain;
+            xapiPrefixes            = newConfiguration.xapiPrefixes;
+            app_prjs                = newConfiguration.app_prjs;
+            knownProjectIds         = newConfiguration.knownProjectIds;
+
+            serviceFinders          = {};
 
             serviceFinderCache.reset(r, projectRunningStates);
           }

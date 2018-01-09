@@ -208,9 +208,9 @@ lib.ServiceFinderCache = function() {
     const index         = [projectServicePrefix, requestedStack, requestedState];
     var   serviceFinder;
 
-    if (!(serviceFinder = deref(serviceFinders, index))) {
+    if (!(serviceFinder = deref(serviceFinders, [projectServicePrefix, requestedStack, requestedState]))) {
       serviceFinder = mkServiceFinder2(projectId, projectServicePrefix, requestedStack, requestedState, r, projectRunningStates);
-      setOnn(serviceFinders, index, serviceFinder);
+      setOnn(serviceFinders, [projectServicePrefix, requestedStack, requestedState], serviceFinder);
     }
 
     return serviceFinder;
@@ -220,9 +220,9 @@ lib.ServiceFinderCache = function() {
     const index         = [projectServicePrefix, requestedStack];
     var   serviceFinder;
 
-    if (!(serviceFinder = deref(serviceFinders, index))) {
+    if (!(serviceFinder = deref(serviceFinders, [projectServicePrefix, requestedStack]))) {
       serviceFinder = mkStackServiceFinder2(projectServicePrefix, requestedStack);
-      setOnn(serviceFinders, index, serviceFinder);
+      setOnn(serviceFinders, [projectServicePrefix, requestedStack], serviceFinder);
     }
 
     return serviceFinder;
