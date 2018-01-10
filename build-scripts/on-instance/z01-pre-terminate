@@ -1,0 +1,11 @@
+#!/bin/bash -e
+
+eval "$(cli-shezargs $@)"
+
+# Let the code from js-cluster do its pre-terminate code
+(cd ${scripts_dir}/../../build/on-instance && ./z01-pre-terminate)
+
+if [[ -x /opt/nessus_agent/sbin/nessuscli ]]; then
+  sudo /opt/nessus_agent/sbin/nessuscli agent unlink
+fi
+
